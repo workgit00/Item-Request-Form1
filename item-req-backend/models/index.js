@@ -4,6 +4,7 @@ import Department from './Department.js';
 import Request from './Request.js';
 import RequestItem from './RequestItem.js';
 import Approval from './Approval.js';
+import ServiceVehicleRequest from './ServiceVehicleRequest.js';
 
 // Define associations
 
@@ -17,6 +18,7 @@ Department.hasMany(User, {
   foreignKey: 'department_id',
   as: 'Users'
 });
+
 
 // Request - User associations
 Request.belongsTo(User, {
@@ -75,6 +77,17 @@ User.hasMany(Approval, {
   as: 'Approvals'
 });
 
+// ServiceVehicleRequest - User associations
+ServiceVehicleRequest.belongsTo(User, {
+  foreignKey: 'requestor_id',
+  as: 'Requestor'
+});
+
+User.hasMany(ServiceVehicleRequest, {
+  foreignKey: 'requestor_id',
+  as: 'ServiceVehicleRequests'
+});
+
 // Export all models
 export {
   sequelize,
@@ -82,7 +95,8 @@ export {
   Department,
   Request,
   RequestItem,
-  Approval
+  Approval,
+  ServiceVehicleRequest
 };
 
 // Sync database function
