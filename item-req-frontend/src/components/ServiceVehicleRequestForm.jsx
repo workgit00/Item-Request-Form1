@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ArrowLeft, Plus, Trash2, AlertCircle, Save, Send, RotateCcw, CheckCircle, XCircle, Loader } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Save, Send, RotateCcw, CheckCircle, XCircle } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { validateServiceVehicleForm } from "../helpers/validations";
@@ -300,24 +300,6 @@ export default function ServiceVehicleRequestForm() {
     }
   };
 
-  // Helper function to render error message
-  const renderFieldError = (fieldName) => {
-    if (errors[fieldName]) {
-      return (
-        <div className="flex items-center gap-1 mt-1 text-red-600">
-          <AlertCircle size={12} />
-          <span className="text-xs">{errors[fieldName]}</span>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  // Helper function to get input className based on error
-  const getInputClassName = (fieldName, baseClass = "") => {
-    const errorClass = errors[fieldName] ? "border-red-500 bg-red-50" : "";
-    return `${baseClass} ${errorClass}`;
-  };
 
   // Dynamic conditional section config
   const getConditionalConfig = () => {
@@ -471,151 +453,180 @@ export default function ServiceVehicleRequestForm() {
     if (!config) return null;
 
     return (
-      <div className="border-t-2 border-black pt-3 mb-4">
-        <h2 className="text-xs font-bold mb-3 bg-gray-200 py-1 px-2">
-          {config.title}
-        </h2>
+      <div className="border border-gray-400 p-4 mb-6">
+        <div className="bg-gray-100 -m-4 mb-4 px-4 py-2 border-b border-gray-400">
+          <h2 className="text-sm font-bold text-gray-900 uppercase">{config.title}</h2>
+        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-x-8 md:gap-y-2 mb-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
           {config.fields.map((field) => (
             <div
               key={field.name}
               className={field.span === 2 ? "col-span-1 md:col-span-2" : ""}
             >
-              <div className="flex flex-col">
-                <div className="flex flex-col sm:flex-row sm:items-center">
-                  <label className="text-xs font-semibold w-full sm:w-32 mb-1 sm:mb-0">
-                    {field.label}
-                  </label>
-                  <input
-                    type={field.type}
-                    name={field.name}
-                    value={formData[field.name]}
-                    onChange={handleChange}
-                    disabled={loading}
-                    className={getInputClassName(
-                      field.name,
-                      "flex-1 border-b border-black px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    )}
-                  />
-                </div>
-                {renderFieldError(field.name)}
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                {field.label}
+              </label>
+              <div className={`border-b-2 pb-1 ${errors[field.name] ? 'border-red-500' : 'border-gray-400'}`}>
+                <input
+                  type={field.type}
+                  name={field.name}
+                  value={formData[field.name] || ''}
+                  {...getInputProps({
+                    onChange: handleChange,
+                    className: "w-full bg-transparent border-0 focus:outline-none text-sm",
+                    placeholder: `Enter ${field.label.toLowerCase()}`
+                  })}
+                />
               </div>
+              {errors[field.name] && (
+                <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
+              )}
             </div>
           ))}
         </div>
 
         {/* Passengers Section */}
         {config.showPassengers && (
-          <div className="border-t border-gray-300 pt-3 mt-3">
+          <div className="mt-6">
             <div className="flex justify-between items-center mb-3">
-              <h3 className="text-xs font-bold">
+              <h3 className="text-sm font-semibold text-gray-900">
                 {config.passengerLabel || "Passengers"}
               </h3>
-              <button
-                onClick={addPassenger}
-                disabled={loading}
-                className="flex items-center gap-1 bg-green-600 text-white px-3 py-1 text-xs rounded hover:bg-green-700 transition-colors disabled:opacity-50"
-              >
-                <Plus size={14} />
-                Add Passenger
-              </button>
+              {!isViewing && (
+                <button
+                  type="button"
+                  onClick={addPassenger}
+                  disabled={loading}
+                  className="flex items-center text-blue-600 hover:text-blue-800 text-sm"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Passenger
+                </button>
+              )}
             </div>
 
             {formData.passengers.map((passenger, index) => (
               <div
                 key={index}
-                className="bg-gray-50 p-3 mb-3 rounded border border-gray-200"
+                className="border border-gray-300 p-3 mb-3 bg-gray-50"
               >
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-semibold">
+                  <span className="text-xs font-semibold text-gray-700">
                     Passenger {index + 1}
                   </span>
-                  {formData.passengers.length > 1 && (
+                  {!isViewing && formData.passengers.length > 1 && (
                     <button
+                      type="button"
                       onClick={() => removePassenger(index)}
                       disabled={loading}
-                      className="flex items-center gap-1 bg-red-600 text-white px-2 py-1 text-xs rounded hover:bg-red-700 transition-colors disabled:opacity-50"
+                      className="text-red-600 hover:text-red-800"
                     >
-                      <Trash2 size={12} />
-                      Remove
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div className="flex flex-col">
-                    <label className="text-xs font-semibold mb-1">Name</label>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Name</label>
+                  <div className="border-b-2 border-gray-400 pb-1">
                     <input
                       type="text"
-                      value={passenger.name}
-                      onChange={(e) =>
-                        handlePassengerChange(index, "name", e.target.value)
-                      }
-                      disabled={loading}
-                      className="border border-black px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      value={passenger.name || ''}
+                      {...getInputProps({
+                        onChange: (e) => handlePassengerChange(index, "name", e.target.value),
+                        className: "w-full bg-transparent border-0 focus:outline-none text-sm",
+                        placeholder: "Passenger name"
+                      })}
                     />
                   </div>
                 </div>
               </div>
             ))}
-            {renderFieldError("passengers")}
+            {errors.passengers && (
+              <p className="text-red-500 text-xs mt-1">{errors.passengers}</p>
+            )}
           </div>
         )}
       </div>
     );
   };
 
+  if (loading && !id) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  const currentPath = window.location.pathname;
+  const isEditing = currentPath.includes('/edit');
+  const isViewing = !!id && !isEditing;
+
+  const getInputProps = (baseProps = {}) => {
+    if (isViewing) {
+      return {
+        ...baseProps,
+        disabled: true,
+        className: `${baseProps.className || ''} bg-gray-50`.trim()
+      };
+    }
+    return baseProps;
+  };
+
   return (
-    <div className="min-h-screen bg-white py-2 md:py-4 lg:py-8 px-2 md:px-3 lg:px-4">
-      <div className="max-w-5xl mx-auto">
-        {/* Top Navigation */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 mb-3 md:mb-4 lg:mb-6">
-          <button
-            onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-semibold text-xs sm:text-sm md:text-base transition-colors"
-          >
-            <ArrowLeft size={18} className="sm:w-5 sm:h-5" />
-            <span className="hidden sm:inline">Back to Dashboard</span>
-            <span className="sm:hidden">Back</span>
-          </button>
-          <h1 className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-gray-800 order-first sm:order-none w-full sm:w-auto text-center sm:text-center">
-            STC Packaging Solutions
-          </h1>
+    <div className="min-h-screen bg-gray-100 py-8">
+      {/* Back Button */}
+      <div className="max-w-4xl mx-auto mb-4 px-4">
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="flex items-center text-gray-600 hover:text-gray-800"
+        >
+          <ArrowLeft className="h-5 w-5 mr-1" />
+          Back to Dashboard
+        </button>
+      </div>
 
-          <div className="hidden lg:block w-20"></div>
-        </div>
-
-        {/* Success Message */}
-        {successMessage && (
-          <div className="mb-4 p-3 bg-green-50 border border-green-300 rounded">
-            <p className="text-xs sm:text-sm text-green-700 font-semibold">{successMessage}</p>
+      {/* PDF-like Form Container */}
+      <div className="max-w-4xl mx-auto bg-white shadow-2xl" style={{ boxShadow: '0 0 30px rgba(0,0,0,0.15)' }}>
+        <div className="p-8 md:p-12" style={{ minHeight: '11in' }}>
+          {/* Header Section */}
+          <div className="border-b-2 border-gray-800 pb-4 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-16 h-16 bg-blue-600 flex items-center justify-center text-white font-bold text-xl">
+                  STC
+                </div>
+                <div>
+                  <div className="text-xl font-bold text-gray-900">STYROTECH CORPORATION</div>
+                  <div className="text-sm text-gray-600">Packaging Solutions</div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-gray-500">Form No.</div>
+                <div className="text-sm font-semibold text-gray-700">HRD-FM-035 rev.04</div>
+              </div>
+            </div>
+            <div className="text-center">
+              <h1 className="text-2xl font-bold text-gray-900 uppercase tracking-wide">
+                Service Vehicle Request Form
+              </h1>
+              {id && (
+                <div className="text-sm text-gray-600 mt-2">
+                  Request ID: <span className="font-semibold">{id}</span>
+                </div>
+              )}
+            </div>
           </div>
-        )}
 
-        {/* Loading Spinner */}
-        {loading && (
-          <div className="flex items-center justify-center mb-4">
-            <Loader size={20} className="animate-spin text-blue-600 mr-2" />
-            <span className="text-xs sm:text-sm text-gray-600">Processing...</span>
-          </div>
-        )}
-
-        <div className="bg-white border-2 border-black overflow-x-auto">
-          {/* Header */}
-          <div className="bg-gray-800 text-white p-2 sm:p-3 md:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-            <h1 className="text-base sm:text-lg md:text-xl font-bold">
-              Service Vehicle Request Forms
-            </h1>
-
-            <p className="text-xs text-gray-100 whitespace-nowrap">HRD-FM-035 rev.04 073025</p>
-          </div>
-
-          {/* Reminders */}
-          <div className="border-b-2 border-black p-2 sm:p-3 md:p-4">
-            <h2 className="font-bold text-xs sm:text-sm mb-2">Reminders:</h2>
-            <ol className="text-xs space-y-1 ml-4 list-decimal">
-              <li >
+          {/* Reminders Section */}
+          <div className="border border-gray-400 p-4 mb-6 bg-yellow-50">
+            <div className="bg-gray-100 -m-4 mb-4 px-4 py-2 border-b border-gray-400">
+              <h2 className="text-sm font-bold text-gray-900 uppercase">Reminders</h2>
+            </div>
+            <ol className="text-xs space-y-1 ml-4 list-decimal text-gray-700">
+              <li>
                 Request for service vehicle must be planned and must be filed at
                 least one (1) business day before the planned travel. Cut-off
                 time for filing of request is at 4pm, Mondays to Fridays.
@@ -627,401 +638,430 @@ export default function ServiceVehicleRequestForm() {
             </ol>
           </div>
 
-          <div className="p-2 sm:p-3 md:p-4">
+          {/* Error Display */}
+          {errors.submit && (
+            <div className="bg-red-50 border-2 border-red-400 p-4 mb-4">
+              <p className="text-red-600 text-sm">{errors.submit}</p>
+            </div>
+          )}
+
+          {/* Success Message */}
+          {successMessage && (
+            <div className="bg-green-50 border-2 border-green-400 p-4 mb-4">
+              <p className="text-green-700 text-sm font-semibold">{successMessage}</p>
+            </div>
+          )}
+
+          {/* Form */}
+          <form className="space-y-6">
          
 
-            {/* Submit Error */}
-            {errors.submit && (
-              <div className="mb-3 p-2 sm:p-3 bg-red-50 border border-red-300 rounded">
-                <p className="text-xs sm:text-sm text-red-600">{errors.submit}</p>
+            {/* Section 1: Requestor Information */}
+            <div className="border border-gray-400 p-4 mb-6">
+              <div className="bg-gray-100 -m-4 mb-4 px-4 py-2 border-b border-gray-400">
+                <h2 className="text-sm font-bold text-gray-900 uppercase">Section 1: Requestor Information</h2>
               </div>
-            )}
-
-            {/* Requestor Information */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 md:gap-x-8 md:gap-y-2 mb-3 md:mb-4">
-              <div className="flex flex-col">
-                <label className="text-xs font-semibold mb-1">
-                  Requestor
-                </label>
-                <input
-                  type="text"
-                  name="requestor_name"
-                  value={formData.requestor_name}
-                  readOnly
-                  className="border-b border-black px-2 py-1 text-xs focus:outline-none bg-gray-100 cursor-not-allowed"
-                />
-              </div>
-              <div className="flex flex-col">
-                <label className="text-xs font-semibold mb-1">
-                  Date Prepared
-                </label>
-                <input
-                  type="date"
-                  name="date_prepared"
-                  value={formData.date_prepared}
-                  onChange={handleChange}
-                  disabled={loading}
-                  className={getInputClassName(
-                    "date_prepared",
-                    "border-b border-black px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  )}
-                />
-                {renderFieldError("date_prepared")}
-              </div>
-              <div className="flex flex-col">
-                <label className="text-xs font-semibold mb-1">
-                  Function / Department
-                </label>
-                <input
-                  type="text"
-                  name="department_id"
-                  value={
-                    (() => {
-                      const userData = localStorage.getItem("user");
-                      if (userData) {
-                        try {
-                          const parsedUser = JSON.parse(userData);
-                          return parsedUser.department?.name || "";
-                        } catch (error) {
-                          return "";
-                        }
-                      }
-                      return "";
-                    })()
-                  }
-                  readOnly
-                  className="border-b border-black px-2 py-1 text-xs focus:outline-none bg-gray-100 cursor-not-allowed"
-                />
-              </div>
-              <div className="flex flex-col">
-                <label className="text-xs font-semibold mb-1">
-                  Contact Number
-                </label>
-                <input
-                  type="tel"
-                  name="contact_number"
-                  value={formData.contact_number}
-                  onChange={handleChange}
-                  disabled={loading}
-                  className={getInputClassName(
-                    "contact_number",
-                    "border-b border-black px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  )}
-                />
-                {renderFieldError("contact_number")}
-              </div>
-            </div>
-
-            {/* Purpose */}
-            <div className="mb-3 md:mb-4 flex flex-col">
-              <label className="text-xs font-semibold block mb-1">
-                Purpose of Request
-              </label>
-              <textarea
-                name="purpose"
-                value={formData.purpose}
-                onChange={handleChange}
-                disabled={loading}
-                rows="2"
-                className={getInputClassName(
-                  "purpose",
-                  "w-full border border-black px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                )}
-              ></textarea>
-              {renderFieldError("purpose")}
-            </div>
-
-            {/* Request Type */}
-            <div className="mb-3 md:mb-4 flex flex-col">
-              <label className="text-xs font-semibold block mb-1">
-                Type of Request
-              </label>
-              <select
-                name="request_type"
-                value={formData.request_type}
-                onChange={handleChange}
-                disabled={loading}
-                className={getInputClassName(
-                  "request_type",
-                  "w-full border border-black px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                )}
-              >
-                <option value="" disabled>
-                  Select Request Type
-                </option>
-                {REQUEST_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              {renderFieldError("request_type")}
-            </div>
-
-            {/* Travel Dates */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 md:gap-x-8 md:gap-y-2 mb-3 md:mb-4">
-              <div className="flex flex-col">
-                <label className="text-xs font-semibold mb-1">
-                  Travel Date From
-                </label>
-                <input
-                  type="date"
-                  name="travel_date_from"
-                  value={formData.travel_date_from}
-                  onChange={handleChange}
-                  disabled={loading}
-                  className={getInputClassName(
-                    "travel_date_from",
-                    "border-b border-black px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  )}
-                />
-                {renderFieldError("travel_date_from")}
-              </div>
-              <div className="flex flex-col">
-                <label className="text-xs font-semibold mb-1">
-                  Travel Date To
-                </label>
-                <input
-                  type="date"
-                  name="travel_date_to"
-                  value={formData.travel_date_to}
-                  onChange={handleChange}
-                  disabled={loading}
-                  className={getInputClassName(
-                    "travel_date_to",
-                    "border-b border-black px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  )}
-                />
-                {renderFieldError("travel_date_to")}
-              </div>
-            </div>
-
-            {/* Dynamic Conditional Section */}
-            {renderConditionalSection()}
-
-            {/* License Information - Only for car_only request type */}
-            {formData.request_type === "car_only" && (
-              <div className="border-t-2 border-black pt-2 sm:pt-3 mb-3 md:mb-4">
-                <h2 className="text-xs font-bold mb-2 sm:mb-3 bg-gray-200 py-1 px-2">
-                  DRIVER'S LICENSE INFORMATION
-                </h2>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 md:gap-x-8 md:gap-y-2 mb-3">
-                  <div className="flex flex-col">
-                    <label className="text-xs font-semibold mb-1">
-                      Do you have a valid Driver's License?
-                    </label>
-                    <select
-                      name="has_valid_license"
-                      value={formData.has_valid_license}
-                      onChange={handleChange}
-                      disabled={loading}
-                      className="border-b border-black px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      <option value="" disabled>
-                        Select
-                      </option>
-                      <option value="true">Yes</option>
-                      <option value="false">No</option>
-                    </select>
-                  </div>
-                  <div className="flex flex-col">
-                    <label className="text-xs font-semibold mb-1">
-                      License Number
-                    </label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Requestor <span className="text-red-600">*</span>
+                  </label>
+                  <div className="border-b-2 border-gray-400 pb-1">
                     <input
                       type="text"
-                      name="license_number"
-                      value={formData.license_number}
-                      onChange={handleChange}
-                      disabled={
-                        loading ||
-                        formData.has_valid_license === "false" ||
-                        formData.has_valid_license === ""
-                      }
-                      className={getInputClassName(
-                        "license_number",
-                        `border-b border-black px-2 py-1 text-xs focus:outline-none ${
-                          formData.has_valid_license === "false" ||
-                          formData.has_valid_license === ""
-                            ? "bg-gray-100 cursor-not-allowed"
-                            : "focus:ring-1 focus:ring-blue-500"
-                        } disabled:bg-gray-100 disabled:cursor-not-allowed`
-                      )}
+                      name="requestor_name"
+                      value={formData.requestor_name}
+                      readOnly
+                      className="w-full bg-transparent border-0 focus:outline-none text-sm"
                     />
-                    {renderFieldError("license_number")}
                   </div>
-                  <div className="flex flex-col col-span-1 sm:col-span-2">
-                    <label className="text-xs font-semibold mb-1">
-                      License Expiration Date
-                    </label>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Date Prepared
+                  </label>
+                  <div className={`border-b-2 pb-1 ${errors.date_prepared ? 'border-red-500' : 'border-gray-400'}`}>
                     <input
                       type="date"
-                      name="expiration_date"
-                      value={formData.expiration_date}
-                      onChange={handleChange}
-                      disabled={
-                        loading ||
-                        formData.has_valid_license === "false" ||
-                        formData.has_valid_license === ""
-                      }
-                      className={getInputClassName(
-                        "expiration_date",
-                        `border-b border-black px-2 py-1 text-xs focus:outline-none ${
-                          formData.has_valid_license === "false" ||
-                          formData.has_valid_license === ""
-                            ? "bg-gray-100 cursor-not-allowed"
-                            : "focus:ring-1 focus:ring-blue-500"
-                        } disabled:bg-gray-100 disabled:cursor-not-allowed`
-                      )}
+                      name="date_prepared"
+                      value={formData.date_prepared}
+                      {...getInputProps({
+                        onChange: handleChange,
+                        className: "w-full bg-transparent border-0 focus:outline-none text-sm"
+                      })}
                     />
-                    {renderFieldError("expiration_date")}
+                  </div>
+                  {errors.date_prepared && (
+                    <p className="text-red-500 text-xs mt-1">{errors.date_prepared}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Department <span className="text-red-600">*</span>
+                  </label>
+                  <div className="border-b-2 border-gray-400 pb-1">
+                    <input
+                      type="text"
+                      value={
+                        (() => {
+                          const userData = localStorage.getItem("user");
+                          if (userData) {
+                            try {
+                              const parsedUser = JSON.parse(userData);
+                              return parsedUser.department?.name || "";
+                            } catch (error) {
+                              return "";
+                            }
+                          }
+                          return "";
+                        })()
+                      }
+                      readOnly
+                      className="w-full bg-transparent border-0 focus:outline-none text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Contact Number
+                  </label>
+                  <div className={`border-b-2 pb-1 ${errors.contact_number ? 'border-red-500' : 'border-gray-400'}`}>
+                    <input
+                      type="tel"
+                      name="contact_number"
+                      value={formData.contact_number}
+                      {...getInputProps({
+                        onChange: handleChange,
+                        className: "w-full bg-transparent border-0 focus:outline-none text-sm",
+                        placeholder: "Contact number"
+                      })}
+                    />
+                  </div>
+                  {errors.contact_number && (
+                    <p className="text-red-500 text-xs mt-1">{errors.contact_number}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Request Details */}
+            <div className="border border-gray-400 p-4 mb-6">
+              <div className="bg-gray-100 -m-4 mb-4 px-4 py-2 border-b border-gray-400">
+                <h2 className="text-sm font-bold text-gray-900 uppercase">Section 2: Request Details</h2>
+              </div>
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Purpose of Request
+                  </label>
+                  <div className={`border-b-2 pb-1 ${errors.purpose ? 'border-red-500' : 'border-gray-400'}`}>
+                    <textarea
+                      name="purpose"
+                      value={formData.purpose}
+                      {...getInputProps({
+                        onChange: handleChange,
+                        className: "w-full bg-transparent border-0 focus:outline-none text-sm",
+                        rows: 3,
+                        placeholder: "Explain the purpose of this vehicle request..."
+                      })}
+                    />
+                  </div>
+                  {errors.purpose && (
+                    <p className="text-red-500 text-xs mt-1">{errors.purpose}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Type of Request <span className="text-red-600">*</span>
+                  </label>
+                  <div className={`border-b-2 pb-1 ${errors.request_type ? 'border-red-500' : 'border-gray-400'}`}>
+                    <select
+                      name="request_type"
+                      value={formData.request_type}
+                      {...getInputProps({
+                        onChange: handleChange,
+                        className: "w-full bg-transparent border-0 focus:outline-none text-sm"
+                      })}
+                    >
+                      <option value="">Select Request Type</option>
+                      {REQUEST_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {errors.request_type && (
+                    <p className="text-red-500 text-xs mt-1">{errors.request_type}</p>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Travel Date From
+                    </label>
+                    <div className={`border-b-2 pb-1 ${errors.travel_date_from ? 'border-red-500' : 'border-gray-400'}`}>
+                      <input
+                        type="date"
+                        name="travel_date_from"
+                        value={formData.travel_date_from}
+                        {...getInputProps({
+                          onChange: handleChange,
+                          className: "w-full bg-transparent border-0 focus:outline-none text-sm"
+                        })}
+                      />
+                    </div>
+                    {errors.travel_date_from && (
+                      <p className="text-red-500 text-xs mt-1">{errors.travel_date_from}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Travel Date To
+                    </label>
+                    <div className={`border-b-2 pb-1 ${errors.travel_date_to ? 'border-red-500' : 'border-gray-400'}`}>
+                      <input
+                        type="date"
+                        name="travel_date_to"
+                        value={formData.travel_date_to}
+                        {...getInputProps({
+                          onChange: handleChange,
+                          className: "w-full bg-transparent border-0 focus:outline-none text-sm"
+                        })}
+                      />
+                    </div>
+                    {errors.travel_date_to && (
+                      <p className="text-red-500 text-xs mt-1">{errors.travel_date_to}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Request Type Specific Details */}
+            {renderConditionalSection()}
+
+            {/* Section 3: Driver's License Information - Only for car_only request type */}
+            {formData.request_type === "car_only" && (
+              <div className="border border-gray-400 p-4 mb-6">
+                <div className="bg-gray-100 -m-4 mb-4 px-4 py-2 border-b border-gray-400">
+                  <h2 className="text-sm font-bold text-gray-900 uppercase">Section 3: Driver's License Information</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Do you have a valid Driver's License?
+                    </label>
+                    <div className="border-b-2 border-gray-400 pb-1">
+                      <select
+                        name="has_valid_license"
+                        value={formData.has_valid_license}
+                        {...getInputProps({
+                          onChange: handleChange,
+                          className: "w-full bg-transparent border-0 focus:outline-none text-sm"
+                        })}
+                      >
+                        <option value="">Select</option>
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      License Number
+                    </label>
+                    <div className={`border-b-2 pb-1 ${errors.license_number ? 'border-red-500' : 'border-gray-400'}`}>
+                      <input
+                        type="text"
+                        name="license_number"
+                        value={formData.license_number || ''}
+                        {...getInputProps({
+                          onChange: handleChange,
+                          disabled: formData.has_valid_license === "false" || formData.has_valid_license === "",
+                          className: "w-full bg-transparent border-0 focus:outline-none text-sm"
+                        })}
+                      />
+                    </div>
+                    {errors.license_number && (
+                      <p className="text-red-500 text-xs mt-1">{errors.license_number}</p>
+                    )}
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      License Expiration Date
+                    </label>
+                    <div className={`border-b-2 pb-1 ${errors.expiration_date ? 'border-red-500' : 'border-gray-400'}`}>
+                      <input
+                        type="date"
+                        name="expiration_date"
+                        value={formData.expiration_date || ''}
+                        {...getInputProps({
+                          onChange: handleChange,
+                          disabled: formData.has_valid_license === "false" || formData.has_valid_license === "",
+                          className: "w-full bg-transparent border-0 focus:outline-none text-sm"
+                        })}
+                      />
+                    </div>
+                    {errors.expiration_date && (
+                      <p className="text-red-500 text-xs mt-1">{errors.expiration_date}</p>
+                    )}
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Requested By Section */}
-            <div className="border-t-2 border-black mt-4 md:mt-6 pt-2 sm:pt-3 mb-4 md:mb-6">
-              <h2 className="text-xs font-bold mb-2 sm:mb-3 bg-gray-200 py-1 px-2">
-                REQUESTED BY
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 md:gap-x-8 md:gap-y-2">
-                <div className="flex flex-col">
-                  <input
-                    type="text"
-                    name="requested_by_signature"
-                    value={formData.requested_by_signature}
-                    readOnly
-                    className="border-b border-black text-center px-2 py-1 text-xs focus:outline-none bg-gray-100 cursor-not-allowed"
-                  />
-                  <p className="text-xs text-center text-gray-600 mt-1">
+            {/* Section 4: Requested By */}
+            <div className="border border-gray-400 p-4 mb-6">
+              <div className="bg-gray-100 -m-4 mb-4 px-4 py-2 border-b border-gray-400">
+                <h2 className="text-sm font-bold text-gray-900 uppercase">Section 4: Requested By</h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
                     Name and Signature
-                  </p>
+                  </label>
+                  <div className="border-b-2 border-gray-400 pb-1">
+                    <input
+                      type="text"
+                      name="requested_by_signature"
+                      value={formData.requested_by_signature}
+                      readOnly
+                      className="w-full bg-transparent border-0 focus:outline-none text-sm text-center"
+                    />
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                  <input
-                    type="date"
-                    name="requested_by_date"
-                    value={formData.requested_by_date}
-                    onChange={handleChange}
-                    disabled={loading}
-                    className={getInputClassName(
-                      "requested_by_date",
-                      "border-b border-black text-center px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    )}
-                  />
-                  <p className="text-xs text-center text-gray-600 mt-1">Date</p>
-                  {renderFieldError("requested_by_date")}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Date
+                  </label>
+                  <div className={`border-b-2 pb-1 ${errors.requested_by_date ? 'border-red-500' : 'border-gray-400'}`}>
+                    <input
+                      type="date"
+                      name="requested_by_date"
+                      value={formData.requested_by_date || ''}
+                      {...getInputProps({
+                        onChange: handleChange,
+                        className: "w-full bg-transparent border-0 focus:outline-none text-sm text-center"
+                      })}
+                    />
+                  </div>
+                  {errors.requested_by_date && (
+                    <p className="text-red-500 text-xs mt-1">{errors.requested_by_date}</p>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="border-t-2 border-black mt-4 md:mt-6 pt-2 sm:pt-3">
-              <h2 className="text-xs font-bold mb-2 sm:mb-3 bg-gray-200 py-1 px-2">
-                TO BE ACCOMPLISHED BY OD & HUMAN CAPITAL – GENERAL SERVICES
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 md:gap-x-8 md:gap-y-2 mb-3">
-                <div className="flex flex-col">
-                  <label className="text-xs font-semibold mb-1">
+            {/* Section 5: General Services Section */}
+            <div className="border border-gray-400 p-4 mb-6">
+              <div className="bg-gray-100 -m-4 mb-4 px-4 py-2 border-b border-gray-400">
+                <h2 className="text-sm font-bold text-gray-900 uppercase">Section 5: To Be Accomplished By OD & Human Capital – General Services</h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
                     Reference Code
                   </label>
-                  <div className="border-b border-black px-2 py-1 text-xs"></div>
+                  <div className="border-b-2 border-gray-400 pb-1">
+                    <div className="w-full bg-transparent text-sm text-gray-500">-</div>
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                  <label className="text-xs font-semibold mb-1">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
                     Assigned Driver
                   </label>
-                  <div className="border-b border-black px-2 py-1 text-xs"></div>
+                  <div className="border-b-2 border-gray-400 pb-1">
+                    <div className="w-full bg-transparent text-sm text-gray-500">-</div>
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                  <label className="text-xs font-semibold mb-1">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
                     Approval Date
                   </label>
-                  <div className="border-b border-black px-2 py-1 text-xs"></div>
+                  <div className="border-b-2 border-gray-400 pb-1">
+                    <div className="w-full bg-transparent text-sm text-gray-500">-</div>
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                  <label className="text-xs font-semibold mb-1">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
                     Assigned Vehicle
                   </label>
-                  <div className="border-b border-black px-2 py-1 text-xs"></div>
+                  <div className="border-b-2 border-gray-400 pb-1">
+                    <div className="w-full bg-transparent text-sm text-gray-500">-</div>
+                  </div>
                 </div>
               </div>
-              <p className="text-xs text-right text-gray-600 mt-2">
-                HRD-FM-035 rev.04 073025
-              </p>
             </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Action Buttons */}
-      <div className="max-w-5xl mx-auto mt-4 md:mt-6 px-2 md:px-3 lg:px-4">
-        <div className="flex flex-col justify-end sm:flex-row flex-wrap gap-2 sm:gap-3 pt-3 sm:pt-4 md:pt-6 border-t-2 border-gray-400">
-          <button
-            type="button"
-            onClick={handleCancel}
-            disabled={loading}
-            className="w-full sm:w-auto px-4 sm:px-6 py-2 border-2 border-gray-400 rounded text-gray-700 hover:bg-gray-50 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50"
-          >
-            Cancel
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSaveDraft}
-            disabled={loading}
-            className="w-full sm:w-auto flex items-center justify-center sm:justify-start gap-2 px-4 sm:px-6 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50"
-          >
-            <Save size={14} className="sm:w-4 sm:h-4" />
-            Save Draft
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={loading}
-            className="w-full sm:w-auto flex items-center justify-center sm:justify-start gap-2 px-4 sm:px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50"
-          >
-            {loading ? <Loader size={14} className="animate-spin sm:w-4 sm:h-4" /> : <Send size={14} className="sm:w-4 sm:h-4" />}
-            Submit Request
-          </button>
-
-          {/* HR/Admin Actions - Only visible to HR users */}
-          {user?.role === "hr_manager" || user?.role === "admin" ? (
-            <>
+            {/* Action Buttons */}
+            <div className="flex justify-end space-x-4 pt-6 border-t-2 border-gray-400 mt-8">
               <button
                 type="button"
-                onClick={handleReturn}
-                disabled={loading || !id}
-                className="w-full sm:w-auto flex items-center justify-center sm:justify-start gap-2 px-4 sm:px-6 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50"
+                onClick={handleCancel}
+                disabled={loading}
+                className="px-6 py-2 border-2 border-gray-400 rounded text-gray-700 hover:bg-gray-50 text-sm font-semibold"
               >
-                <RotateCcw size={14} className="sm:w-4 sm:h-4" />
-                Return
+                Cancel
               </button>
+              
+              {!isViewing && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleSaveDraft}
+                    disabled={loading}
+                    className="flex items-center px-6 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 text-sm font-semibold"
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    Save Draft
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={loading}
+                    className="flex items-center px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm font-semibold"
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    Submit Request
+                  </button>
+                </>
+              )}
 
-              <button
-                type="button"
-                onClick={handleDecline}
-                disabled={loading || !id}
-                className="w-full sm:w-auto flex items-center justify-center sm:justify-start gap-2 px-4 sm:px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50"
-              >
-                <XCircle size={14} className="sm:w-4 sm:h-4" />
-                Decline
-              </button>
-
-              <button
-                type="button"
-                onClick={handleApprove}
-                disabled={loading || !id}
-                className="w-full sm:w-auto flex items-center justify-center sm:justify-start gap-2 px-4 sm:px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50"
-              >
-                <CheckCircle size={14} className="sm:w-4 sm:h-4" />
-                Approve
-              </button>
-            </>
-          ) : null}
+              {/* HR/Admin Actions */}
+              {id && (user?.role === "hr_manager" || user?.role === "admin") && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleReturn}
+                    disabled={loading}
+                    className="flex items-center px-6 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:opacity-50 text-sm font-semibold"
+                  >
+                    <RotateCcw className="h-4 w-4 mr-2" />
+                    Return
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDecline}
+                    disabled={loading}
+                    className="flex items-center px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 text-sm font-semibold"
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Decline
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApprove}
+                    disabled={loading}
+                    className="flex items-center px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 text-sm font-semibold"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Approve
+                  </button>
+                </>
+              )}
+            </div>
+          </form>
         </div>
       </div>
     </div>
