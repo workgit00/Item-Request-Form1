@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Package, ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle, User } from 'lucide-react';
-import { requestsAPI } from '../services/api';
+import { Search, Package, ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle, User, Car } from 'lucide-react';
+import { requestsAPI, serviceVehicleRequestsAPI } from '../services/api';
 
 const TrackRequest = () => {
   const navigate = useNavigate();
@@ -23,8 +23,54 @@ const TrackRequest = () => {
     setRequestData(null);
 
     try {
-      const response = await requestsAPI.trackByTicket(ticketCode.trim());
-      setRequestData(response.data);
+      const code = ticketCode.trim();
+      
+      // Try to determine request type based on code format
+      // REQ-* = Item request, SVR-* = Vehicle request
+      let response;
+      
+      if (code.startsWith('SVR-')) {
+        // Vehicle request
+        try {
+          response = await serviceVehicleRequestsAPI.trackByReference(code);
+          setRequestData(response.data);
+        } catch (vehicleErr) {
+          // If vehicle request fails, try item request as fallback
+          try {
+            response = await requestsAPI.trackByTicket(code);
+            setRequestData(response.data);
+          } catch (itemErr) {
+            throw vehicleErr; // Throw the original vehicle error
+          }
+        }
+      } else if (code.startsWith('REQ-')) {
+        // Item request
+        try {
+          response = await requestsAPI.trackByTicket(code);
+          setRequestData(response.data);
+        } catch (itemErr) {
+          // If item request fails, try vehicle request as fallback
+          try {
+            response = await serviceVehicleRequestsAPI.trackByReference(code);
+            setRequestData(response.data);
+          } catch (vehicleErr) {
+            throw itemErr; // Throw the original item error
+          }
+        }
+      } else {
+        // Unknown format - try both
+        try {
+          response = await requestsAPI.trackByTicket(code);
+          setRequestData(response.data);
+        } catch (itemErr) {
+          try {
+            response = await serviceVehicleRequestsAPI.trackByReference(code);
+            setRequestData(response.data);
+          } catch (vehicleErr) {
+            throw itemErr; // Throw the first error
+          }
+        }
+      }
     } catch (err) {
       console.error('Error tracking request:', err);
       setError(err.response?.data?.message || 'Failed to find request. Please check the ticket code and try again.');
@@ -62,7 +108,7 @@ const TrackRequest = () => {
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'Pending';
+    if (!dateString) return null;
     const date = new Date(dateString);
     return date.toLocaleString('en-US', {
       year: 'numeric',
@@ -95,7 +141,7 @@ const TrackRequest = () => {
             Track Your Request
           </h1>
           <p className="text-gray-600">
-            Enter your ticket code to view the status of your IT equipment request
+            Enter your ticket code to view the status of your IT equipment or vehicle request
           </p>
         </div>
 
@@ -115,7 +161,7 @@ const TrackRequest = () => {
                     setTicketCode(e.target.value);
                     setError('');
                   }}
-                  placeholder="e.g., REQ-20240106-123456"
+                  placeholder="e.g., REQ-20240106-123456 or SVR-20240106-123456"
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   disabled={loading}
                 />
@@ -165,9 +211,21 @@ const TrackRequest = () => {
             <div className="bg-white rounded-lg shadow-lg p-6">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                    {requestData.ticketCode}
-                  </h2>
+                  <div className="flex items-center gap-2 mb-2">
+                    {requestData.requestType === 'vehicle' ? (
+                      <Car className="w-6 h-6 text-blue-600" />
+                    ) : (
+                      <Package className="w-6 h-6 text-blue-600" />
+                    )}
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      {requestData.ticketCode}
+                    </h2>
+                    {requestData.requestType === 'vehicle' && (
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                        Vehicle Request
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-3 text-sm text-gray-600">
                     <span>Submitted by: <strong>{requestData.submittedBy}</strong></span>
                     {requestData.department && (
@@ -181,11 +239,13 @@ const TrackRequest = () => {
                   <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(requestData.status)}`}>
                     {requestData.status.replace(/_/g, ' ').toUpperCase()}
                   </span>
-                  <div className="mt-2">
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(requestData.priority)}`}>
-                      {requestData.priority.toUpperCase()} Priority
-                    </span>
-                  </div>
+                  {requestData.priority && (
+                    <div className="mt-2">
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(requestData.priority)}`}>
+                        {requestData.priority.toUpperCase()} Priority
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -194,8 +254,44 @@ const TrackRequest = () => {
                   <strong>Purpose:</strong> {requestData.purpose}
                 </p>
                 <p className="text-sm text-gray-600 mt-1">
-                  <strong>Submitted:</strong> {formatDate(requestData.submittedDate)}
+                  <strong>Submitted:</strong> {
+                    requestData.status === 'draft' 
+                      ? 'Not submitted yet'
+                      : (requestData.submittedDate 
+                          ? formatDate(requestData.submittedDate) 
+                          : (requestData.timeline?.[0]?.timestamp 
+                              ? formatDate(requestData.timeline[0].timestamp) 
+                              : 'Date not available'))
+                  }
                 </p>
+                {requestData.requestType === 'vehicle' && requestData.vehicleDetails && (
+                  <div className="mt-3 space-y-1">
+                    <p className="text-sm text-gray-600">
+                      <strong>Request Type:</strong> {requestData.vehicleDetails.requestType}
+                    </p>
+                    {requestData.vehicleDetails.travelDateFrom && (
+                      <p className="text-sm text-gray-600">
+                        <strong>Travel Date:</strong> {new Date(requestData.vehicleDetails.travelDateFrom).toLocaleDateString()}
+                        {requestData.vehicleDetails.travelDateTo && ` - ${new Date(requestData.vehicleDetails.travelDateTo).toLocaleDateString()}`}
+                      </p>
+                    )}
+                    {requestData.vehicleDetails.destination && (
+                      <p className="text-sm text-gray-600">
+                        <strong>Destination:</strong> {requestData.vehicleDetails.destination}
+                      </p>
+                    )}
+                    {requestData.vehicleDetails.assignedDriver && (
+                      <p className="text-sm text-gray-600">
+                        <strong>Assigned Driver:</strong> {requestData.vehicleDetails.assignedDriver}
+                      </p>
+                    )}
+                    {requestData.vehicleDetails.assignedVehicle && (
+                      <p className="text-sm text-gray-600">
+                        <strong>Assigned Vehicle:</strong> {requestData.vehicleDetails.assignedVehicle}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -253,7 +349,7 @@ const TrackRequest = () => {
                         </div>
                         <div className="text-right ml-4">
                           <span className={`text-sm ${event.isPending ? 'text-yellow-600 font-medium' : 'text-gray-500'}`}>
-                            {event.isPending ? 'Pending' : formatDate(event.timestamp)}
+                            {event.isPending ? 'Pending' : (event.timestamp ? formatDate(event.timestamp) : (event.isCompleted ? 'Completed' : ''))}
                           </span>
                         </div>
                       </div>
@@ -263,34 +359,36 @@ const TrackRequest = () => {
               </div>
             </div>
 
-            {/* Items Requested */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Items Requested</h3>
-              <div className="space-y-3">
-                {requestData.items.map((item, index) => (
-                  <div key={index} className="p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                            {item.category.replace(/_/g, ' ').toUpperCase()}
-                          </span>
-                          <span className="text-sm text-gray-600">Qty: {item.quantity}</span>
+            {/* Items Requested (only for item requests) */}
+            {requestData.requestType !== 'vehicle' && requestData.items && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Items Requested</h3>
+                <div className="space-y-3">
+                  {requestData.items.map((item, index) => (
+                    <div key={index} className="p-4 bg-gray-50 rounded-lg">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                              {item.category.replace(/_/g, ' ').toUpperCase()}
+                            </span>
+                            <span className="text-sm text-gray-600">Qty: {item.quantity}</span>
+                          </div>
+                          {item.itemDescription && (
+                            <p className="text-sm text-gray-700 mt-2">{item.itemDescription}</p>
+                          )}
+                          {item.specifications && (
+                            <p className="text-sm text-gray-600 mt-1">
+                              <strong>Specs:</strong> {item.specifications}
+                            </p>
+                          )}
                         </div>
-                        {item.itemDescription && (
-                          <p className="text-sm text-gray-700 mt-2">{item.itemDescription}</p>
-                        )}
-                        {item.specifications && (
-                          <p className="text-sm text-gray-600 mt-1">
-                            <strong>Specs:</strong> {item.specifications}
-                          </p>
-                        )}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 

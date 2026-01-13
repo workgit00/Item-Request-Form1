@@ -48,10 +48,17 @@ export default function ServiceVehicleRequestForm() {
     item_quantity: "",
     recipient_name: "",
     recipient_contact: "",
+    status: "",
+    assigned_driver: "",
+    assigned_vehicle: "",
+    approval_date: "",
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [isODHCUser, setIsODHCUser] = useState(false);
+  const [attachments, setAttachments] = useState([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
 
   useEffect(() => {
     // Get current user's full name from auth context
@@ -80,6 +87,18 @@ export default function ServiceVehicleRequestForm() {
       department_id: userDepartmentId || "",
     }));
 
+    // Check if user is from ODHC department
+    if (userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        const departmentName = parsedUser.department?.name || '';
+        const isODHC = departmentName.toLowerCase().includes('odhc') && parsedUser.role === 'department_approver';
+        setIsODHCUser(isODHC);
+      } catch (error) {
+        console.error("Error parsing user data:", error);
+      }
+    }
+
     // Load existing request from database if editing
     if (id) {
       loadFormData(id);
@@ -92,7 +111,65 @@ export default function ServiceVehicleRequestForm() {
       const response = await serviceVehicleRequestsAPI.getById(requestId);
       // Extract request object from response if it exists
       const data = response.data.request || response.data;
-      setFormData(data);
+      console.log("Loaded vehicle request data:", data);
+      console.log("Request status:", data.status);
+      console.log("User role:", user?.role);
+      
+      // Ensure passengers is always an array
+      // If passengers exists and is an array, use it; otherwise default to empty array with one empty passenger
+      if (!data.passengers || !Array.isArray(data.passengers)) {
+        // If passengers is a string (old format), convert it
+        if (data.passengers && typeof data.passengers === 'string') {
+          data.passengers = [{ name: data.passengers }];
+        } else {
+          // Default to one empty passenger field
+          data.passengers = [{ name: "" }];
+        }
+      } else {
+        // Ensure all passenger objects have the name property
+        data.passengers = data.passengers.map(p => 
+          typeof p === 'string' ? { name: p } : (p && p.name ? p : { name: "" })
+        );
+        // If array is empty, add one empty passenger
+        if (data.passengers.length === 0) {
+          data.passengers = [{ name: "" }];
+        }
+      }
+      
+      // Map requested_date to requested_by_date for Section 4 signature
+      if (data.requested_date && !data.requested_by_date) {
+        // Format the date to YYYY-MM-DD if it's a full datetime
+        const dateValue = new Date(data.requested_date);
+        if (!isNaN(dateValue.getTime())) {
+          data.requested_by_date = dateValue.toISOString().split('T')[0];
+        }
+      }
+      
+      // Map approval_date to date format if needed
+      if (data.approval_date) {
+        const approvalDateValue = new Date(data.approval_date);
+        if (!isNaN(approvalDateValue.getTime())) {
+          data.approval_date = approvalDateValue.toISOString().split('T')[0];
+        }
+      }
+      
+      // Ensure all required fields have default values
+      setFormData({
+        ...formData,
+        ...data,
+        passengers: data.passengers || [{ name: "" }],
+        requested_by_date: data.requested_by_date || (data.requested_date ? new Date(data.requested_date).toISOString().split('T')[0] : ""),
+        assigned_driver: data.assigned_driver || '',
+        assigned_vehicle: data.assigned_vehicle || '',
+        approval_date: data.approval_date || ''
+      });
+
+      // Load attachments
+      if (data.attachments && Array.isArray(data.attachments)) {
+        setAttachments(data.attachments);
+      } else {
+        setAttachments([]);
+      }
     } catch (error) {
       console.error("Error loading form data:", error);
       alert("Error loading request data");
@@ -111,30 +188,33 @@ export default function ServiceVehicleRequestForm() {
   };
 
   const handlePassengerChange = (index, field, value) => {
-    const updatedPassengers = [...formData.passengers];
+    const currentPassengers = formData.passengers || [{ name: "" }];
+    const updatedPassengers = [...currentPassengers];
     updatedPassengers[index][field] = value;
     setFormData({ ...formData, passengers: updatedPassengers });
   };
 
   const addPassenger = () => {
+    const currentPassengers = formData.passengers || [{ name: "" }];
     setFormData({
       ...formData,
       passengers: [
-        ...formData.passengers,
+        ...currentPassengers,
         { name: "" },
       ],
     });
   };
 
   const removePassenger = (index) => {
-    const updatedPassengers = formData.passengers.filter((_, i) => i !== index);
+    const currentPassengers = formData.passengers || [{ name: "" }];
+    const updatedPassengers = currentPassengers.filter((_, i) => i !== index);
     setFormData({ ...formData, passengers: updatedPassengers });
   };
 
   const handleSubmit = async () => {
     // Validate dates before form validation
     const dateFields = ['date_prepared', 'travel_date_from', 'travel_date_to', 'expiration_date'];
-    const cleanedFormData = { ...formData, status: 'submitted' };
+    const cleanedFormData = { ...formData, status: 'draft' }; // Save as draft first
     
     dateFields.forEach(field => {
       if (cleanedFormData[field] && cleanedFormData[field].trim() === '') {
@@ -142,7 +222,9 @@ export default function ServiceVehicleRequestForm() {
       }
     });
 
-    const validation = validateServiceVehicleForm(cleanedFormData);
+    // Validate with submitted status for validation rules
+    const validationData = { ...cleanedFormData, status: 'submitted' };
+    const validation = validateServiceVehicleForm(validationData);
 
     if (!validation.isValid) {
       setErrors(validation.errors);
@@ -156,14 +238,32 @@ export default function ServiceVehicleRequestForm() {
 
       const dataToSubmit = { ...cleanedFormData };
 
+      let requestId = id;
+
       if (id) {
-        // Update existing request
+        // Update existing request (as draft)
         await serviceVehicleRequestsAPI.update(id, dataToSubmit);
-        setSuccessMessage("Request submitted successfully!");
+        requestId = id;
       } else {
-        // Create new request  
-        await serviceVehicleRequestsAPI.create(dataToSubmit);
+        // Create new request (as draft)
+        const response = await serviceVehicleRequestsAPI.create(dataToSubmit);
+        // Handle different response structures - ServiceVehicleRequest uses 'id' field mapped to 'request_id' in DB
+        requestId = response.data?.request?.id || 
+                   response.data?.request?.request_id ||
+                   response.data?.id;
+        
+        if (!requestId) {
+          console.error('Response structure:', response.data);
+          throw new Error("Could not determine request ID from response");
+        }
+      }
+      
+      // Now submit the request (this will trigger email notifications)
+      if (requestId) {
+        await serviceVehicleRequestsAPI.submit(requestId);
         setSuccessMessage("Service Vehicle Request submitted successfully!");
+      } else {
+        throw new Error("Failed to get request ID after creation");
       }
       
       setTimeout(() => {
@@ -211,6 +311,117 @@ export default function ServiceVehicleRequestForm() {
     }
   };
 
+  const handleFileUpload = async (event) => {
+    const files = Array.from(event.target.files);
+    if (!files.length) return;
+
+    // Check if user is an approver (department_approver or super_administrator)
+    if (user?.role !== 'department_approver' && user?.role !== 'super_administrator') {
+      alert("Only approvers can upload attachments");
+      event.target.value = ''; // Reset file input
+      return;
+    }
+
+    // Allow uploads for submitted, returned, department_approved, or completed requests
+    // ODHC approvers need to upload attachments when status is department_approved (after Step 1 approval)
+    if (!['submitted', 'returned', 'department_approved', 'completed'].includes(formData.status)) {
+      alert("Attachments can only be uploaded for submitted, returned, department_approved, or completed requests");
+      event.target.value = ''; // Reset file input
+      return;
+    }
+
+    if (!id) {
+      alert("Please save the request first before uploading attachments");
+      event.target.value = ''; // Reset file input
+      return;
+    }
+
+    try {
+      setUploadingFiles(true);
+      const formData = new FormData();
+      files.forEach(file => {
+        formData.append('files', file);
+      });
+
+      const response = await serviceVehicleRequestsAPI.uploadAttachments(id, formData);
+      
+      if (response.data.success) {
+        setAttachments(prev => [...prev, ...response.data.attachments]);
+        setSuccessMessage("Files uploaded successfully!");
+        setTimeout(() => setSuccessMessage(""), 3000);
+      }
+    } catch (error) {
+      console.error("Error uploading files:", error);
+      alert(error.response?.data?.message || "Error uploading files");
+    } finally {
+      setUploadingFiles(false);
+      event.target.value = ''; // Reset file input
+    }
+  };
+
+  const handleDeleteAttachment = async (filename) => {
+    if (!id) return;
+    
+    if (!window.confirm("Are you sure you want to delete this attachment?")) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await serviceVehicleRequestsAPI.deleteAttachment(id, filename);
+      setAttachments(prev => prev.filter(att => att.filename !== filename));
+      setSuccessMessage("Attachment deleted successfully!");
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (error) {
+      console.error("Error deleting attachment:", error);
+      alert(error.response?.data?.message || "Error deleting attachment");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const handleSaveSection4 = async () => {
+    if (!id) {
+      alert("Please save the request first before updating Section 4");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      const section4Data = {
+        assigned_driver: formData.assigned_driver || null,
+        assigned_vehicle: formData.assigned_vehicle || null,
+        approval_date: formData.approval_date || null,
+      };
+
+      // Use the assign endpoint or update endpoint
+      await serviceVehicleRequestsAPI.assign(id, section4Data);
+      
+      setSuccessMessage("Section 4 updated successfully!");
+      
+      // Reload form data to get updated values
+      await loadFormData(id);
+      
+      setTimeout(() => {
+        setSuccessMessage("");
+      }, 3000);
+    } catch (error) {
+      console.error("Error saving Section 4:", error);
+      alert(error.response?.data?.message || "Error saving Section 4");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCancel = () => {
     const confirmCancel = window.confirm(
       "Are you sure you want to cancel? Any unsaved changes will be lost."
@@ -242,6 +453,38 @@ export default function ServiceVehicleRequestForm() {
   };
 
   const handleApprove = async () => {
+    // Validate Section 4 fields before approval ONLY if user is ODHC
+    if (isODHCUser) {
+      if (!formData.assigned_driver || !formData.assigned_driver.trim()) {
+        alert("Please fill in the Assigned Driver field in Section 4 before approving.");
+        return;
+      }
+
+      if (!formData.assigned_vehicle || !formData.assigned_vehicle.trim()) {
+        alert("Please fill in the Assigned Vehicle field in Section 4 before approving.");
+        return;
+      }
+
+      if (!formData.approval_date) {
+        alert("Please fill in the Approval Date field in Section 4 before approving.");
+        return;
+      }
+
+      // If Section 4 fields are not saved, save them first (only for ODHC users)
+      if (id) {
+        try {
+          setLoading(true);
+          await handleSaveSection4();
+          // Wait a moment for the save to complete
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+          console.error("Error saving Section 4:", error);
+          alert("Error saving Section 4. Please try again.");
+          setLoading(false);
+          return;
+        }
+      }
+    }
     try {
       setLoading(true);
       const approvalReason = prompt("Please provide approval remarks (optional):");
@@ -250,7 +493,7 @@ export default function ServiceVehicleRequestForm() {
         remarks: approvalReason || "" 
       });
       
-      setSuccessMessage("Request approved successfully!");
+      setSuccessMessage("Request approved and completed successfully!");
       setTimeout(() => {
         navigate("/dashboard");
       }, 2000);
@@ -300,24 +543,6 @@ export default function ServiceVehicleRequestForm() {
     }
   };
 
-  // Helper function to render error message
-  const renderFieldError = (fieldName) => {
-    if (errors[fieldName]) {
-      return (
-        <div className="flex items-center gap-1 mt-1 text-red-600">
-          <AlertCircle size={12} />
-          <span className="text-xs">{errors[fieldName]}</span>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  // Helper function to get input className based on error
-  const getInputClassName = (fieldName, baseClass = "") => {
-    const errorClass = errors[fieldName] ? "border-red-500 bg-red-50" : "";
-    return `${baseClass} ${errorClass}`;
-  };
 
   // Dynamic conditional section config
   const getConditionalConfig = () => {
@@ -440,6 +665,30 @@ export default function ServiceVehicleRequestForm() {
       point_to_point_service: {
         title: "ACCOMPLISH THIS PART IF REQUEST IS POINT-TO-POINT",
         fields: [
+          {
+            name: "pick_up_location",
+            label: "Pick-Up Location",
+            type: "text",
+            span: 1,
+          },
+          {
+            name: "pick_up_time",
+            label: "Pick-Up Time",
+            type: "time",
+            span: 1,
+          },
+          {
+            name: "drop_off_location",
+            label: "Drop-Off Location",
+            type: "text",
+            span: 1,
+          },
+          {
+            name: "drop_off_time",
+            label: "Drop-Off Time",
+            type: "time",
+            span: 1,
+          },
           { name: "destination", label: "Destination", type: "text", span: 2 },
           {
             name: "departure_time",
@@ -448,7 +697,8 @@ export default function ServiceVehicleRequestForm() {
             span: 1,
           },
         ],
-        showPassengers: false,
+        showPassengers: true,
+        passengerLabel: "Passengers",
       },
       car_only: {
         title: "ACCOMPLISH THIS PART IF REQUEST IS CAR ONLY",
@@ -522,7 +772,7 @@ export default function ServiceVehicleRequestForm() {
               </button>
             </div>
 
-            {formData.passengers.map((passenger, index) => (
+            {(formData.passengers || []).map((passenger, index) => (
               <div
                 key={index}
                 className="bg-gray-50 p-3 mb-3 rounded border border-gray-200"
@@ -562,6 +812,7 @@ export default function ServiceVehicleRequestForm() {
             {renderFieldError("passengers")}
           </div>
         )}
+        </div>
       </div>
     );
   };
@@ -799,16 +1050,15 @@ export default function ServiceVehicleRequestForm() {
             {/* Dynamic Conditional Section */}
             {renderConditionalSection()}
 
-            {/* License Information - Only for car_only request type */}
+            {/* Section 3: Driver's License Information - Only for car_only request type */}
             {formData.request_type === "car_only" && (
-              <div className="border-t-2 border-black pt-2 sm:pt-3 mb-3 md:mb-4">
-                <h2 className="text-xs font-bold mb-2 sm:mb-3 bg-gray-200 py-1 px-2">
-                  DRIVER'S LICENSE INFORMATION
-                </h2>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 md:gap-x-8 md:gap-y-2 mb-3">
-                  <div className="flex flex-col">
-                    <label className="text-xs font-semibold mb-1">
+              <div className="border border-gray-400 p-4 mb-6">
+                <div className="bg-gray-100 -m-4 mb-4 px-4 py-2 border-b border-gray-400">
+                  <h2 className="text-sm font-bold text-gray-900 uppercase">Section 3: Driver's License Information</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
                       Do you have a valid Driver's License?
                     </label>
                     <select

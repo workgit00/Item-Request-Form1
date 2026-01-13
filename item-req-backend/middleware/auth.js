@@ -86,10 +86,20 @@ export function requireRole(...allowedRoles) {
       });
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    // Flatten the allowedRoles array in case arrays are passed
+    const roles = allowedRoles.flat();
+    
+    // Debug logging (can be removed in production)
+    console.log('Role check:', {
+      userRole: req.user.role,
+      allowedRoles: roles,
+      user: req.user.username
+    });
+    
+    if (!roles.includes(req.user.role)) {
       return res.status(403).json({ 
         error: 'Insufficient permissions',
-        message: `Access denied. Required roles: ${allowedRoles.join(', ')}`
+        message: `Access denied. Required roles: ${roles.join(', ')}. Your role: ${req.user.role}`
       });
     }
 

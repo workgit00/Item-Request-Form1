@@ -133,13 +133,9 @@ const ServiceVehicleRequest = sequelize.define('ServiceVehicleRequest', {
     comment: 'Date when the request was approved'
   },
   assigned_driver: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING(255),
     allowNull: true,
-    references: {
-      model: 'users',
-      key: 'id'
-    },
-    comment: 'ID of the assigned driver'
+    comment: 'Name of the assigned driver (manual input)'
   },
   assigned_vehicle: {
     type: DataTypes.STRING(100),
@@ -155,6 +151,16 @@ const ServiceVehicleRequest = sequelize.define('ServiceVehicleRequest', {
     type: DataTypes.TEXT,
     allowNull: true,
     comment: 'Comments or notes about the request'
+  },
+  attachments: {
+    type: DataTypes.JSONB,
+    allowNull: true,
+    comment: 'Array of attachment file paths and metadata'
+  },
+  passengers: {
+    type: DataTypes.JSONB,
+    allowNull: true,
+    comment: 'Array of passenger objects with name field'
   }
 }, {
   tableName: 'service_vehicle_requests',

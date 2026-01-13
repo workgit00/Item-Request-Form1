@@ -59,6 +59,16 @@ function AppRoutes() {
         element={<TrackRequest />} 
       />
 
+      {/* Form Selector Route */}
+      <Route 
+        path="/forms" 
+        element={
+          <ProtectedRoute>
+            <FormSelector />
+          </ProtectedRoute>
+        } 
+      />
+
       {/* Protected Routes */}
       <Route 
         path="/dashboard" 
@@ -138,6 +148,15 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <DepartmentManagement />
+          </ProtectedRoute>
+        } 
+      />
+      
+      <Route 
+        path="/settings/workflows" 
+        element={
+          <ProtectedRoute>
+            <WorkflowSettings />
           </ProtectedRoute>
         } 
       />

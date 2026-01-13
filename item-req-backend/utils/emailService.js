@@ -30,7 +30,7 @@ class EmailService {
     }
   }
 
-  async sendEmail(to, subject, html, text = null) {
+  async sendEmail(to, subject, html, text = null, attachments = []) {
     if (!this.transporter) {
       console.error('❌ Email transporter not initialized');
       return { success: false, error: 'Email service not configured' };
@@ -42,7 +42,8 @@ class EmailService {
         to: Array.isArray(to) ? to.join(', ') : to,
         subject,
         html,
-        text: text || this.htmlToText(html)
+        text: text || this.htmlToText(html),
+        attachments: attachments.length > 0 ? attachments : undefined
       };
 
       console.log(`📧 Attempting to send email:`);
@@ -214,6 +215,9 @@ class EmailService {
           </div>
           <div class="footer">
             <p>This is an automated notification. Please do not reply to this email.</p>
+            <p style="margin-top: 10px;">
+              <a href="http://172.16.33.27:5173/login" style="color: #2563eb; text-decoration: underline;">Access Login Portal</a>
+            </p>
           </div>
         </div>
       </body>
@@ -266,6 +270,9 @@ class EmailService {
           </div>
           <div class="footer">
             <p>This is an automated notification. Please do not reply to this email.</p>
+            <p style="margin-top: 10px;">
+              <a href="http://172.16.33.27:5173/login" style="color: #f59e0b; text-decoration: underline;">Access Login Portal</a>
+            </p>
           </div>
         </div>
       </body>
@@ -326,6 +333,9 @@ class EmailService {
           </div>
           <div class="footer">
             <p>This is an automated notification. Please do not reply to this email.</p>
+            <p style="margin-top: 10px;">
+              <a href="http://172.16.33.27:5173/login" style="color: #10b981; text-decoration: underline;">Access Login Portal</a>
+            </p>
           </div>
         </div>
       </body>
@@ -377,6 +387,9 @@ class EmailService {
           </div>
           <div class="footer">
             <p>This is an automated notification. Please do not reply to this email.</p>
+            <p style="margin-top: 10px;">
+              <a href="http://172.16.33.27:5173/login" style="color: #ef4444; text-decoration: underline;">Access Login Portal</a>
+            </p>
           </div>
         </div>
       </body>
@@ -427,6 +440,9 @@ class EmailService {
           </div>
           <div class="footer">
             <p>This is an automated notification. Please do not reply to this email.</p>
+            <p style="margin-top: 10px;">
+              <a href="http://172.16.33.27:5173/login" style="color: #f59e0b; text-decoration: underline;">Access Login Portal</a>
+            </p>
           </div>
         </div>
       </body>
@@ -493,6 +509,498 @@ class EmailService {
     const html = this.getRequestReturnedTemplate(request, requestor, approver, returnReason);
     
     return await this.sendEmail(requestor.email, subject, html);
+  }
+
+  // Vehicle Request Email Methods
+  async notifyVehicleRequestSubmitted(vehicleRequest, requestor, departmentApprover) {
+    if (!requestor?.email) {
+      console.log(`⚠️ Skipping email - requestor has no email`);
+      return;
+    }
+
+    const subject = `Vehicle Request Submitted: ${vehicleRequest.reference_code || vehicleRequest.id}`;
+    const html = this.getVehicleRequestSubmittedTemplate(vehicleRequest, requestor, departmentApprover);
+    const attachments = await this.prepareAttachments(vehicleRequest.attachments);
+    
+    return await this.sendEmail(requestor.email, subject, html, null, attachments);
+  }
+
+  async notifyVehicleApprovalRequired(vehicleRequest, requestor, approver) {
+    if (!approver?.email) {
+      console.log(`⚠️ Skipping email - approver ${approver?.username || 'unknown'} has no email`);
+      return;
+    }
+
+    const subject = `Action Required: Approve Vehicle Request ${vehicleRequest.reference_code || vehicleRequest.id}`;
+    const html = this.getVehicleApprovalRequestTemplate(vehicleRequest, requestor, approver);
+    const attachments = await this.prepareAttachments(vehicleRequest.attachments);
+    
+    return await this.sendEmail(approver.email, subject, html, null, attachments);
+  }
+
+  async notifyVehicleRequestApproved(vehicleRequest, requestor, approver, isCompleted = true, nextApprover = null, approverComments = null) {
+    if (!requestor?.email) {
+      console.log(`⚠️ Skipping email - requestor has no email`);
+      return;
+    }
+
+    const subject = isCompleted 
+      ? `Vehicle Request Approved: ${vehicleRequest.reference_code || vehicleRequest.id}`
+      : `Vehicle Request Approved - Pending Next Approval: ${vehicleRequest.reference_code || vehicleRequest.id}`;
+    const html = this.getVehicleRequestApprovedTemplate(vehicleRequest, requestor, approver, isCompleted, nextApprover, approverComments);
+    const attachments = await this.prepareAttachments(vehicleRequest.attachments);
+    
+    return await this.sendEmail(requestor.email, subject, html, null, attachments);
+  }
+
+  async notifyVehicleRequestDeclined(vehicleRequest, requestor, approver, comments) {
+    if (!requestor?.email) {
+      console.log(`⚠️ Skipping email - requestor has no email`);
+      return;
+    }
+
+    const subject = `Vehicle Request Declined: ${vehicleRequest.reference_code || vehicleRequest.id}`;
+    const html = this.getVehicleRequestDeclinedTemplate(vehicleRequest, requestor, approver, comments);
+    const attachments = await this.prepareAttachments(vehicleRequest.attachments);
+    
+    return await this.sendEmail(requestor.email, subject, html, null, attachments);
+  }
+
+  async notifyVehicleRequestReturned(vehicleRequest, requestor, approver, returnReason) {
+    if (!requestor?.email) {
+      console.log(`⚠️ Skipping email - requestor has no email`);
+      return;
+    }
+
+    const subject = `Vehicle Request Returned for Revision: ${vehicleRequest.reference_code || vehicleRequest.id}`;
+    const html = this.getVehicleRequestReturnedTemplate(vehicleRequest, requestor, approver, returnReason);
+    const attachments = await this.prepareAttachments(vehicleRequest.attachments);
+    
+    return await this.sendEmail(requestor.email, subject, html, null, attachments);
+  }
+
+  // Prepare attachments for email
+  async prepareAttachments(attachments) {
+    if (!attachments || !Array.isArray(attachments) || attachments.length === 0) {
+      return [];
+    }
+
+    const fs = await import('fs');
+    const path = await import('path');
+    const { fileURLToPath } = await import('url');
+    const { dirname } = await import('path');
+    
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const uploadsDir = path.join(__dirname, '..', 'uploads', 'vehicle-requests');
+
+    const emailAttachments = [];
+
+    for (const attachment of attachments) {
+      const filePath = path.join(uploadsDir, attachment.filename);
+      
+      if (fs.existsSync(filePath)) {
+        emailAttachments.push({
+          filename: attachment.originalName || attachment.filename,
+          path: filePath
+        });
+      } else {
+        console.warn(`⚠️ Attachment file not found: ${filePath}`);
+      }
+    }
+
+    return emailAttachments;
+  }
+
+  // Vehicle Request Email Templates
+  getVehicleRequestSubmittedTemplate(vehicleRequest, requestor, departmentApprover) {
+    const requestorName = requestor.first_name && requestor.last_name 
+      ? `${requestor.first_name} ${requestor.last_name}` 
+      : requestor.username || vehicleRequest.requestor_name;
+    
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #2563eb; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+          .content { background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
+          .info-row { margin: 10px 0; }
+          .label { font-weight: bold; color: #4b5563; }
+          .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>Vehicle Request Submitted Successfully</h2>
+          </div>
+          <div class="content">
+            <p>Hello ${requestorName},</p>
+            <p>Your vehicle request has been submitted successfully and is now pending department approval.</p>
+            
+            <div class="info-row">
+              <span class="label">Reference Code:</span> ${vehicleRequest.reference_code || vehicleRequest.id}
+            </div>
+            <div class="info-row">
+              <span class="label">Request Type:</span> ${vehicleRequest.request_type || 'N/A'}
+            </div>
+            <div class="info-row">
+              <span class="label">Travel Date:</span> ${vehicleRequest.travel_date_from ? new Date(vehicleRequest.travel_date_from).toLocaleDateString() : 'N/A'}
+            </div>
+            <div class="info-row">
+              <span class="label">Submitted Date:</span> ${new Date(vehicleRequest.submitted_at || vehicleRequest.requested_date || new Date()).toLocaleString()}
+            </div>
+            
+            <p>Your request is now awaiting approval from ${departmentApprover ? `${departmentApprover.first_name || ''} ${departmentApprover.last_name || ''}`.trim() || departmentApprover.username : 'your department approver'}.</p>
+            
+            <p>You will be notified once your request has been reviewed.</p>
+          </div>
+          <div class="footer">
+            <p>This is an automated message. Please do not reply to this email.</p>
+            <p style="margin-top: 10px;">
+              <a href="http://172.16.33.27:5173/login" style="color: #2563eb; text-decoration: underline;">Access Login Portal</a>
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  getVehicleApprovalRequestTemplate(vehicleRequest, requestor, approver) {
+    const requestorName = requestor.first_name && requestor.last_name 
+      ? `${requestor.first_name} ${requestor.last_name}` 
+      : requestor.username || vehicleRequest.requestor_name;
+    
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #dc2626; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+          .content { background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
+          .info-row { margin: 10px 0; }
+          .label { font-weight: bold; color: #4b5563; }
+          .button { display: inline-block; padding: 10px 20px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
+          .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>Action Required: Vehicle Request Approval</h2>
+          </div>
+          <div class="content">
+            <p>Hello ${approver.first_name || approver.username},</p>
+            <p>A new vehicle request requires your approval.</p>
+            
+            <div class="info-row">
+              <span class="label">Reference Code:</span> ${vehicleRequest.reference_code || vehicleRequest.id}
+            </div>
+            <div class="info-row">
+              <span class="label">Requestor:</span> ${requestorName}
+            </div>
+            <div class="info-row">
+              <span class="label">Request Type:</span> ${vehicleRequest.request_type || 'N/A'}
+            </div>
+            <div class="info-row">
+              <span class="label">Travel Date:</span> ${vehicleRequest.travel_date_from ? new Date(vehicleRequest.travel_date_from).toLocaleDateString() : 'N/A'}
+            </div>
+            ${vehicleRequest.purpose ? `<div class="info-row"><span class="label">Purpose:</span> ${vehicleRequest.purpose}</div>` : ''}
+            ${vehicleRequest.attachments && vehicleRequest.attachments.length > 0 ? `
+            <div class="info-row">
+              <span class="label">Attachments:</span> ${vehicleRequest.attachments.length} file(s) attached
+            </div>
+            ` : ''}
+            
+            <p>Please review and approve or decline this request in the system.</p>
+            <p style="margin-top: 15px;">
+              <a href="http://172.16.33.27:5173/login" style="display: inline-block; padding: 10px 20px; background-color: #dc2626; color: white; text-decoration: none; border-radius: 5px;">Access Login Portal</a>
+            </p>
+          </div>
+          <div class="footer">
+            <p>This is an automated message. Please do not reply to this email.</p>
+            <p style="margin-top: 10px;">
+              <a href="http://172.16.33.27:5173/login" style="color: #dc2626; text-decoration: underline;">Access Login Portal</a>
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  getVehicleRequestApprovedTemplate(vehicleRequest, requestor, approver, isCompleted = true, nextApprover = null, approverComments = null) {
+    const requestorName = requestor.first_name && requestor.last_name 
+      ? `${requestor.first_name} ${requestor.last_name}` 
+      : requestor.username || vehicleRequest.requestor_name;
+    const approverName = approver.first_name && approver.last_name 
+      ? `${approver.first_name} ${approver.last_name}` 
+      : approver.username;
+    const nextApproverName = nextApprover && nextApprover.first_name && nextApprover.last_name
+      ? `${nextApprover.first_name} ${nextApprover.last_name}`
+      : nextApprover?.username || nextApprover?.email || 'the next approver';
+    
+    // Use approverComments if provided, otherwise fall back to vehicleRequest.comments
+    const commentsToShow = approverComments || vehicleRequest.comments;
+    
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #16a34a; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+          .content { background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
+          .info-row { margin: 10px 0; }
+          .label { font-weight: bold; color: #4b5563; }
+          .pending-notice { background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 15px 0; }
+          .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>Vehicle Request Approved</h2>
+          </div>
+          <div class="content">
+            <p>Hello ${requestorName},</p>
+            ${isCompleted ? `
+            <p>Your vehicle request has been approved and completed.</p>
+            ` : `
+            <p>Your vehicle request has been approved by ${approverName}.</p>
+            <div class="pending-notice">
+              <strong>Note:</strong> Your request is now pending approval from ${nextApproverName}. You will be notified once all approvals are complete.
+            </div>
+            `}
+            
+            <div class="info-row">
+              <span class="label">Reference Code:</span> ${vehicleRequest.reference_code || vehicleRequest.id}
+            </div>
+            <div class="info-row">
+              <span class="label">Approved By:</span> ${approverName}
+            </div>
+            <div class="info-row">
+              <span class="label">Approval Date:</span> ${vehicleRequest.approval_date ? new Date(vehicleRequest.approval_date).toLocaleString() : new Date().toLocaleString()}
+            </div>
+            ${commentsToShow ? `<div class="info-row"><span class="label">Comments from ${approverName}:</span> ${commentsToShow}</div>` : ''}
+            
+            ${isCompleted ? `
+            <p>Your vehicle request is now complete. Please contact your department for further arrangements.</p>
+            ` : `
+            <p>Your request will be processed further once all required approvals are received.</p>
+            `}
+          </div>
+          <div class="footer">
+            <p>This is an automated message. Please do not reply to this email.</p>
+            <p style="margin-top: 10px;">
+              <a href="http://172.16.33.27:5173/login" style="color: #16a34a; text-decoration: underline;">Access Login Portal</a>
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  getVehicleRequestDeclinedTemplate(vehicleRequest, requestor, approver, comments) {
+    const requestorName = requestor.first_name && requestor.last_name 
+      ? `${requestor.first_name} ${requestor.last_name}` 
+      : requestor.username || vehicleRequest.requestor_name;
+    const approverName = approver.first_name && approver.last_name 
+      ? `${approver.first_name} ${approver.last_name}` 
+      : approver.username;
+    
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #dc2626; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+          .content { background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
+          .info-row { margin: 10px 0; }
+          .label { font-weight: bold; color: #4b5563; }
+          .reason-box { background-color: #fee2e2; border-left: 4px solid #dc2626; padding: 15px; margin: 15px 0; }
+          .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>Vehicle Request Declined</h2>
+          </div>
+          <div class="content">
+            <p>Hello ${requestorName},</p>
+            <p>Unfortunately, your vehicle request has been declined.</p>
+            
+            <div class="info-row">
+              <span class="label">Reference Code:</span> ${vehicleRequest.reference_code || vehicleRequest.id}
+            </div>
+            <div class="info-row">
+              <span class="label">Declined By:</span> ${approverName}
+            </div>
+            ${comments ? `<div class="reason-box"><strong>Reason:</strong><br>${comments}</div>` : ''}
+            
+            <p>If you have any questions, please contact ${approverName}.</p>
+          </div>
+          <div class="footer">
+            <p>This is an automated message. Please do not reply to this email.</p>
+            <p style="margin-top: 10px;">
+              <a href="http://172.16.33.27:5173/login" style="color: #dc2626; text-decoration: underline;">Access Login Portal</a>
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  getVehicleRequestReturnedTemplate(vehicleRequest, requestor, approver, returnReason) {
+    const requestorName = requestor.first_name && requestor.last_name 
+      ? `${requestor.first_name} ${requestor.last_name}` 
+      : requestor.username || vehicleRequest.requestor_name;
+    const approverName = approver.first_name && approver.last_name 
+      ? `${approver.first_name} ${approver.last_name}` 
+      : approver.username;
+    
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #f59e0b; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+          .content { background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
+          .info-row { margin: 10px 0; }
+          .label { font-weight: bold; color: #4b5563; }
+          .reason-box { background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 15px 0; }
+          .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>Vehicle Request Returned for Revision</h2>
+          </div>
+          <div class="content">
+            <p>Hello ${requestorName},</p>
+            <p>Your vehicle request has been returned for revision.</p>
+            
+            <div class="info-row">
+              <span class="label">Reference Code:</span> ${vehicleRequest.reference_code || vehicleRequest.id}
+            </div>
+            <div class="info-row">
+              <span class="label">Returned By:</span> ${approverName}
+            </div>
+            ${returnReason ? `<div class="reason-box"><strong>Revision Required:</strong><br>${returnReason}</div>` : ''}
+            
+            <p>Please review the comments above and resubmit your request with the necessary changes.</p>
+          </div>
+          <div class="footer">
+            <p>This is an automated message. Please do not reply to this email.</p>
+            <p style="margin-top: 10px;">
+              <a href="http://172.16.33.27:5173/login" style="color: #f59e0b; text-decoration: underline;">Access Login Portal</a>
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  getVehicleAttachmentUploadedTemplate(vehicleRequest, requestor, uploadedBy, attachmentCount) {
+    const requestorName = requestor.first_name && requestor.last_name 
+      ? `${requestor.first_name} ${requestor.last_name}` 
+      : requestor.username || vehicleRequest.requestor_name;
+    const uploaderName = uploadedBy.first_name && uploadedBy.last_name 
+      ? `${uploadedBy.first_name} ${uploadedBy.last_name}` 
+      : uploadedBy.username;
+    
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #3b82f6; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+          .content { background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
+          .info-row { margin: 10px 0; }
+          .label { font-weight: bold; color: #4b5563; }
+          .attachment-box { background-color: #dbeafe; border-left: 4px solid #3b82f6; padding: 15px; margin: 15px 0; }
+          .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>New Attachments Added to Vehicle Request</h2>
+          </div>
+          <div class="content">
+            <p>Hello ${requestorName},</p>
+            <p>New attachment(s) have been added to your vehicle request.</p>
+            
+            <div class="info-row">
+              <span class="label">Reference Code:</span> ${vehicleRequest.reference_code || vehicleRequest.id}
+            </div>
+            <div class="info-row">
+              <span class="label">Uploaded By:</span> ${uploaderName}
+            </div>
+            <div class="info-row">
+              <span class="label">Number of Files:</span> ${attachmentCount}
+            </div>
+            <div class="info-row">
+              <span class="label">Upload Date:</span> ${new Date().toLocaleString()}
+            </div>
+            
+            <div class="attachment-box">
+              <strong>📎 Attachments:</strong><br>
+              ${attachmentCount} file(s) ${attachmentCount === 1 ? 'has' : 'have'} been attached to this request. Please check the request details in the system to view the files.
+            </div>
+            
+            <p>You can view the attachments by accessing the request in the system.</p>
+          </div>
+          <div class="footer">
+            <p>This is an automated message. Please do not reply to this email.</p>
+            <p style="margin-top: 10px;">
+              <a href="http://172.16.33.27:5173/login" style="color: #3b82f6; text-decoration: underline;">Access Login Portal</a>
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  async notifyVehicleAttachmentUploaded(vehicleRequest, requestor, uploadedBy, attachmentCount, newAttachments = []) {
+    // Debug logging
+    console.log('📧 notifyVehicleAttachmentUploaded called:');
+    console.log('   Requestor object:', JSON.stringify(requestor, null, 2));
+    console.log('   Requestor email:', requestor?.email);
+    console.log('   Requestor email (alternative):', requestor?.email || requestor?.Email);
+    
+    if (!requestor?.email) {
+      console.log(`⚠️ Skipping email - requestor has no email`);
+      console.log(`   Available requestor fields:`, Object.keys(requestor || {}));
+      return;
+    }
+
+    const subject = `New Attachments Added: ${vehicleRequest.reference_code || vehicleRequest.id}`;
+    const html = this.getVehicleAttachmentUploadedTemplate(vehicleRequest, requestor, uploadedBy, attachmentCount);
+    
+    // Prepare only the newly uploaded attachments for email
+    const emailAttachments = await this.prepareAttachments(newAttachments);
+    
+    return await this.sendEmail(requestor.email, subject, html, null, emailAttachments);
   }
 }
 

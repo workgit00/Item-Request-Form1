@@ -1,9 +1,10 @@
-﻿import express from 'express';
+import express from 'express';
 import { Op } from 'sequelize';
 import { body, validationResult } from 'express-validator';
 import { Request, RequestItem, Approval, User, Department, sequelize } from '../models/index.js';
 import { authenticateToken, requireRole, requireRequestAccess } from '../middleware/auth.js';
 import emailService from '../utils/emailService.js';
+import { processWorkflowOnSubmit } from '../utils/workflowProcessor.js';
 
 const router = express.Router();
 
@@ -18,6 +19,25 @@ function generateRequestNumber() {
   return `REQ-${year}${month}${day}-${timestamp}`;
 }
 
+// Helper function to build order clause for sorting
+function buildOrderClause(sortBy, sortOrder) {
+  const order = sortOrder?.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  
+  switch (sortBy) {
+    case 'status':
+      return [['status', order], ['created_at', 'DESC']];
+    case 'requestor':
+      return [
+        [{ model: User, as: 'Requestor' }, 'first_name', order],
+        [{ model: User, as: 'Requestor' }, 'last_name', order],
+        ['created_at', 'DESC']
+      ];
+    case 'date':
+    default:
+      return [['created_at', order]];
+  }
+}
+
 // Get all requests (with filtering and pagination)
 router.get('/', authenticateToken, async (req, res) => {
   try {
@@ -30,7 +50,9 @@ router.get('/', authenticateToken, async (req, res) => {
       search = '',
       dateFrom = '',
       dateTo = '',
-      requestor = ''
+      requestor = '',
+      sortBy = 'date', // 'date', 'status', 'requestor'
+      sortOrder = 'desc' // 'asc' or 'desc'
     } = req.query;
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -116,11 +138,11 @@ router.get('/', authenticateToken, async (req, res) => {
           include: [{
             model: User,
             as: 'Approver',
-            attributes: ['id', 'username', 'first_name', 'last_name']
+            attributes: ['id', 'username', 'first_name', 'last_name', 'title']
           }]
         }
       ],
-      order: [['created_at', 'DESC']],
+      order: buildOrderClause(sortBy, sortOrder),
       limit: parseInt(limit),
       offset: offset
     });
@@ -208,7 +230,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
           include: [{
             model: User,
             as: 'Approver',
-            attributes: ['id', 'username', 'first_name', 'last_name', 'role']
+            attributes: ['id', 'username', 'first_name', 'last_name', 'role', 'title']
           }]
         }
       ]
@@ -298,7 +320,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
             id: approval.Approver.id,
             username: approval.Approver.username,
             fullName: `${approval.Approver.first_name} ${approval.Approver.last_name}`,
-            role: approval.Approver.role
+            role: approval.Approver.role,
+            title: approval.Approver.title || ''
           } : null,
           comments: approval.comments,
           approvedAt: approval.approved_at,
@@ -308,6 +331,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
           estimatedCompletionDate: approval.estimated_completion_date,
           actualCompletionDate: approval.actual_completion_date,
           processingNotes: approval.processing_notes,
+          signature: approval.signature,
           createdAt: approval.created_at
         })) || [],
         permissions: (() => {
@@ -624,19 +648,33 @@ router.post('/:id/submit', authenticateToken, async (req, res) => {
       });
     }
 
-    // Find department approver
-    const departmentApprover = await User.findOne({
-      where: {
-        department_id: request.department_id,
-        role: 'department_approver',
-        is_active: true
-      }
+    // Use workflow system to find the first approver
+    const workflowResult = await processWorkflowOnSubmit('item_request', {
+      department_id: request.department_id
     });
+
+    let departmentApprover = null;
+    
+    if (workflowResult && workflowResult.approver) {
+      // Use approver from workflow
+      departmentApprover = workflowResult.approver;
+      console.log(`✅ Found approver from workflow: ${departmentApprover.email} (Step: ${workflowResult.step.step_name})`);
+    } else {
+      // Fallback to old logic if no workflow found
+      console.warn('⚠️ No workflow found, using fallback approver logic');
+      departmentApprover = await User.findOne({
+        where: {
+          department_id: request.department_id,
+          role: 'department_approver',
+          is_active: true
+        }
+      });
+    }
 
     if (!departmentApprover) {
       return res.status(400).json({
         error: 'No approver found',
-        message: 'No active department approver found for this department. Please contact your administrator.'
+        message: 'No active approver found for this request. Please contact your administrator.'
       });
     }
 
@@ -723,7 +761,7 @@ router.post('/:id/approve', [
     }
 
     const { id } = req.params;
-    const { comments, estimatedCompletionDate, processingNotes } = req.body;
+    const { comments, estimatedCompletionDate, processingNotes, signature } = req.body;
     
     const request = await Request.findByPk(id, {
       include: [
@@ -791,6 +829,7 @@ router.post('/:id/approve', [
     approval.approver_id = req.user.id;
     if (estimatedCompletionDate) approval.estimated_completion_date = estimatedCompletionDate;
     if (processingNotes) approval.processing_notes = processingNotes;
+    if (signature) approval.signature = signature;
     await approval.save();
 
     // Update request status
@@ -993,6 +1032,7 @@ router.post('/:id/decline', [
     // Update approval
     approval.decline(comments);
     approval.approver_id = req.user.id;
+    if (signature) approval.signature = signature;
     await approval.save();
 
     // Update request status
@@ -1050,7 +1090,7 @@ router.post('/:id/return', [
     }
 
     const { id } = req.params;
-    const { returnReason, returnTo = 'requestor' } = req.body;
+    const { returnReason, returnTo = 'requestor', signature } = req.body;
     
     console.log('Return request - ID:', id, 'Reason:', returnReason, 'ReturnTo:', returnTo);
     
@@ -1109,6 +1149,7 @@ router.post('/:id/return', [
     // Update approval
     approval.returnForRevision(returnReason);
     approval.approver_id = req.user.id;
+    if (signature) approval.signature = signature;
     await approval.save();
 
     // Update request status
@@ -1345,7 +1386,7 @@ router.get('/public/track/:ticketCode', async (req, res) => {
             {
               model: User,
               as: 'Approver',
-              attributes: ['id', 'first_name', 'last_name', 'username', 'role']
+              attributes: ['id', 'first_name', 'last_name', 'username', 'role', 'title']
             }
           ]
         }
@@ -1378,10 +1419,14 @@ router.get('/public/track/:ticketCode', async (req, res) => {
     ];
 
     // 1. Request submitted - Always completed
+    // Extract created_at properly from Sequelize object
+    const requestDataForTimeline = request.toJSON ? request.toJSON() : request;
+    const createdAtForTimeline = requestDataForTimeline.created_at || request.created_at || request.createdAt || requestDataForTimeline.createdAt;
+    
     timeline.push({
       stage: 'submitted',
       status: 'Request Submitted',
-      timestamp: request.created_at,
+      timestamp: createdAtForTimeline,
       completedBy: {
         name: `${request.Requestor.first_name} ${request.Requestor.last_name}`,
         username: request.Requestor.username
@@ -1436,25 +1481,54 @@ router.get('/public/track/:ticketCode', async (req, res) => {
           if (!approval || approval.status === 'pending') {
             description = 'Waiting for Service Desk to process';
           } else if (approval.status === 'approved') {
-            description = 'Completed by Service Desk';
+            // Only say "Completed" if request is actually completed
+            // Otherwise, it's still being processed
+            if (request.status === 'completed') {
+              description = 'Completed by Service Desk';
+            } else {
+              description = 'Processing by Service Desk';
+            }
           } else if (approval.status === 'declined') {
             description = 'Declined by Service Desk';
           }
           break;
       }
 
-      const isApproved = approval && approval.status === 'approved';
-      const isDeclined = approval && approval.status === 'declined';
+      // Check approval status
+      // For Service Desk Processing, only mark as completed if request status is actually "completed"
+      // (Service Desk Processing can be approved twice - first time sets status to service_desk_processing,
+      // second time sets it to completed)
+      let isApproved = approval && approval.status === 'approved';
+      let isDeclined = approval && approval.status === 'declined';
+      
+      // Special handling for Service Desk Processing step
+      if (stage === 'service_desk_processing' && isApproved && request.status !== 'completed') {
+        // Approval exists but request is not completed yet - this is the first approval
+        // Mark as pending/in-progress, not completed
+        isApproved = false;
+      }
+      
       const isPending = !isApproved && !isDeclined;
 
       if (isApproved) {
         lastApprovedStage = index;
       }
 
+      // Use approved_at or declined_at for individual approval dates (not updated_at)
+      let approvalTimestamp = null;
+      if (isApproved && approval.approved_at) {
+        approvalTimestamp = approval.approved_at;
+      } else if (isDeclined && approval.declined_at) {
+        approvalTimestamp = approval.declined_at;
+      } else if (isApproved || isDeclined) {
+        // Fallback to updated_at if specific timestamp not available
+        approvalTimestamp = approval.updated_at;
+      }
+
       timeline.push({
         stage: stage,
         status: stageName,
-        timestamp: (isApproved || isDeclined) ? approval.updated_at : null,
+        timestamp: approvalTimestamp,
         completedBy: (isApproved || isDeclined) && approval.Approver
           ? {
             name: `${approval.Approver.first_name} ${approval.Approver.last_name}`,
@@ -1479,12 +1553,17 @@ router.get('/public/track/:ticketCode', async (req, res) => {
       }
     }
 
+    // Ensure submittedDate is always available (use created_at or timeline first entry)
+    // Use the same extraction logic as timeline
+    const submittedDate = createdAtForTimeline || request.submitted_at || 
+                         (timeline.length > 0 ? timeline[0].timestamp : null);
+
     // Return public-safe data
     res.json({
       ticketCode: request.request_number,
       status: request.status,
       priority: request.priority,
-      submittedDate: request.created_at,
+      submittedDate: submittedDate,
       submittedBy: `${request.Requestor.first_name} ${request.Requestor.last_name}`,
       department: request.Department?.name,
       purpose: request.reason,

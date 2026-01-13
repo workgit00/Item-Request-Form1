@@ -78,6 +78,11 @@ const Approval = sequelize.define('Approval', {
     type: DataTypes.TEXT,
     allowNull: true,
     comment: 'Processing notes for service desk'
+  },
+  signature: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'Base64 encoded signature image of the approver'
   }
 }, {
   tableName: 'approvals',

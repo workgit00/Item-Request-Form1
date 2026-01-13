@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, Trash2, Save, Send, ArrowLeft, CheckCircle, XCircle, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, Save, Send, ArrowLeft, CheckCircle, XCircle, RotateCcw, PenTool } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { requestsAPI, departmentsAPI, EQUIPMENT_CATEGORIES, PRIORITY_OPTIONS } from '../services/api';
-import SignaturePad from './SignaturePad';
+import SignatureModal from './SignatureModal';
 
 const RequestForm = () => {
   const { id } = useParams();
@@ -44,10 +44,57 @@ const RequestForm = () => {
     ]
   });
   const [errors, setErrors] = useState({});
+  const [approvalSignature, setApprovalSignature] = useState('');
+  const [showRequestorSignatureModal, setShowRequestorSignatureModal] = useState(false);
+  const [showApprovalSignatureModal, setShowApprovalSignatureModal] = useState(false);
+  const [tempRequestorSignature, setTempRequestorSignature] = useState('');
+  const [tempApprovalSignature, setTempApprovalSignature] = useState('');
+  const [currentApprovalId, setCurrentApprovalId] = useState(null); // Track which approval the modal is for
 
   const canEditReturned = requestData?.status === 'returned' && 
                           requestData?.requestor?.id === user?.id && 
                           isViewing;
+
+  // Helper function to check if signature can be edited
+  // Can only edit if request is NOT: approved, declined, returned, or completed
+  const canEditSignature = (isRequestor = false, approval = null) => {
+    // Statuses that prevent editing for requestors (locked states)
+    const requestorLockedStatuses = ['submitted', 'department_approved', 'it_manager_approved', 
+                                      'service_desk_processing', 'completed', 
+                                      'department_declined', 'it_manager_declined'];
+    
+    // Statuses that prevent editing for approvers (final states)
+    const approverLockedStatuses = ['completed', 'department_declined', 'it_manager_declined', 'returned'];
+    
+    if (isRequestor) {
+      // Requestor can edit if: creating new request, draft status, or returned (and they're the requestor)
+      // Cannot edit if: submitted, approved, declined, or completed
+      const isLocked = requestData?.status && requestorLockedStatuses.includes(requestData.status);
+      if (isLocked && requestData?.status !== 'returned') {
+        return false;
+      }
+      return isCreating || 
+             requestData?.status === 'draft' || 
+             (requestData?.status === 'returned' && requestData?.requestor?.id === user?.id);
+    } else if (approval) {
+      // Approver can edit if: 
+      // 1. Approval status is pending
+      // 2. They're the current approver
+      // 3. Request is NOT in a final state (not completed/declined/returned)
+      // Note: Approvers CAN edit even if request is 'submitted' as long as their approval is pending
+      const isPendingApproval = approval.status === 'pending';
+      const isCurrentApprover = approval.approver?.id === user?.id;
+      const isLocked = requestData?.status && approverLockedStatuses.includes(requestData.status);
+      
+      // Cannot edit if request is in a final locked state
+      if (isLocked) {
+        return false;
+      }
+      
+      return isPendingApproval && isCurrentApprover;
+    }
+    return false;
+  };
 
   const getInputProps = (baseProps = {}) => {
     if (isViewing) {
@@ -62,6 +109,14 @@ const RequestForm = () => {
 
   // Helper function to get requestor's full name
   const getRequestorName = () => {
+    // Use requestData requestor if available (when viewing/editing)
+    if (requestData?.requestor?.fullName) {
+      return requestData.requestor.fullName;
+    }
+    if (requestData?.requestor?.firstName && requestData?.requestor?.lastName) {
+      return `${requestData.requestor.firstName} ${requestData.requestor.lastName}`.trim();
+    }
+    // Fallback to current user (when creating new request)
     if (user?.fullName) return user.fullName;
     if (user?.firstName && user?.lastName) {
       return `${user.firstName} ${user.lastName}`.trim();
@@ -264,12 +319,29 @@ const RequestForm = () => {
   };
 
   const handleApprove = async () => {
+    // Get signature from the specific approval if we have currentApprovalId, otherwise use approvalSignature
+    let signatureToUse = approvalSignature;
+    if (currentApprovalId && requestData?.approvals) {
+      const approval = requestData.approvals.find(a => a.id === currentApprovalId);
+      if (approval?.signature) {
+        signatureToUse = approval.signature;
+      }
+    }
+    
+    // Check if signature is provided
+    if (!signatureToUse || signatureToUse.trim() === '') {
+      const proceed = confirm('No signature provided. Do you want to proceed without a signature?');
+      if (!proceed) return;
+    }
+    
     const comments = prompt('Enter approval comments (optional):');
     if (comments === null) return;
     try {
       setLoading(true);
-      await requestsAPI.approve(id, { comments });
+      await requestsAPI.approve(id, { comments, signature: signatureToUse || null });
       alert('Request approved successfully!');
+      setApprovalSignature(''); // Clear signature after approval
+      setCurrentApprovalId(null); // Clear current approval ID
       // Reload request data to show updated status and permissions
       await loadRequest();
     } catch (error) {
@@ -281,6 +353,15 @@ const RequestForm = () => {
   };
 
   const handleDecline = async () => {
+    // Get signature from the specific approval if we have currentApprovalId, otherwise use approvalSignature
+    let signatureToUse = approvalSignature;
+    if (currentApprovalId && requestData?.approvals) {
+      const approval = requestData.approvals.find(a => a.id === currentApprovalId);
+      if (approval?.signature) {
+        signatureToUse = approval.signature;
+      }
+    }
+    
     const comments = prompt('Enter reason for declining (required):');
     if (!comments || comments.trim() === '') {
       alert('Decline reason is required');
@@ -289,8 +370,10 @@ const RequestForm = () => {
     if (!confirm('Are you sure you want to decline this request?')) return;
     try {
       setLoading(true);
-      await requestsAPI.decline(id, { comments });
+      await requestsAPI.decline(id, { comments, signature: signatureToUse || null });
       alert('Request declined');
+      setApprovalSignature(''); // Clear signature after declining
+      setCurrentApprovalId(null); // Clear current approval ID
       navigate('/dashboard');
     } catch (error) {
       console.error('Error declining request:', error);
@@ -318,6 +401,15 @@ const RequestForm = () => {
   };
 
   const handleReturn = async () => {
+    // Get signature from the specific approval if we have currentApprovalId, otherwise use approvalSignature
+    let signatureToUse = approvalSignature;
+    if (currentApprovalId && requestData?.approvals) {
+      const approval = requestData.approvals.find(a => a.id === currentApprovalId);
+      if (approval?.signature) {
+        signatureToUse = approval.signature;
+      }
+    }
+    
     let returnTo = 'requestor';
     if (user.role === 'it_manager' || user.role === 'super_administrator') {
       const choice = confirm(
@@ -334,8 +426,10 @@ const RequestForm = () => {
     }
     try {
       setLoading(true);
-      await requestsAPI.return(id, { returnReason, returnTo });
+      await requestsAPI.return(id, { returnReason, returnTo, signature: signatureToUse || null });
       alert(`Request returned to ${returnTo === 'department_approver' ? 'Department Approver' : 'Requestor'}`);
+      setApprovalSignature(''); // Clear signature after returning
+      setCurrentApprovalId(null); // Clear current approval ID
       navigate('/dashboard');
     } catch (error) {
       console.error('Error returning request:', error);
@@ -829,55 +923,257 @@ const RequestForm = () => {
               </div>
             </div>
 
-            {/* Section 5: Requestor Signature */}
+            {/* Section 5: Signatures */}
             <div className="border border-gray-400 p-4 mb-6">
               <div className="bg-gray-100 -m-4 mb-4 px-4 py-2 border-b border-gray-400">
-                <h2 className="text-sm font-bold text-gray-900 uppercase">Section 5: Requestor Signature</h2>
+                <h2 className="text-sm font-bold text-gray-900 uppercase">Section 5: Signatures</h2>
               </div>
+              
               <div className="space-y-4">
-                {isViewing ? (
-                  <div className="border-2 border-gray-400 rounded p-4 bg-white">
-                    <label className="block text-xs font-semibold text-gray-700 mb-2">
-                      Requestor Signature
-                    </label>
-                    <div className="relative border-b-2 border-gray-400 pb-2 pt-4 min-h-[100px]">
-                      {/* Name as base layer - always visible, left-aligned */}
-                      <div className="relative inline-block">
-                        <p className="text-sm font-semibold text-gray-900 mb-1 relative z-0 text-left">
-                          {getRequestorName()}
-                        </p>
-                        {/* Signature overlapping the name area - ALWAYS centered over the name */}
-                        {formData.requestorSignature ? (
-                          <div 
-                            className="absolute top-0 z-10 pointer-events-none"
-                            style={{ 
-                              left: '50%',
-                              transform: 'translate(-50%, -8px)'
-                            }}
-                          >
-                            <img 
-                              src={formData.requestorSignature} 
-                              alt="Requestor Signature" 
-                              className="h-auto opacity-90"
-                              style={{ height: '20px', maxWidth: '400px', objectFit: 'contain' }}
-                            />
+                {/* Signatures - Requestor and Approvers in one row */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Requestor Signature */}
+                  <div className="p-3">
+                    {/* Show signature button if user is the requestor and can edit */}
+                    {((!isViewing) || (isViewing && canEditReturned) || (isViewing && requestData?.status === 'draft' && requestData?.requestor?.id === user?.id)) && 
+                     (user?.role === 'requestor' || requestData?.requestor?.id === user?.id) && 
+                     !(formData.requestorSignature || requestData?.requestorSignature) && (
+                      <div className="mb-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTempRequestorSignature(formData.requestorSignature || requestData?.requestorSignature || '');
+                            setShowRequestorSignatureModal(true);
+                          }}
+                          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-semibold"
+                        >
+                          <PenTool className="h-4 w-4 mr-2" />
+                          Add Signature
+                        </button>
+                      </div>
+                    )}
+                    
+                    {/* Display signature above name */}
+                    <div className="pb-3 pt-4 min-h-[100px]">
+                      {/* Signature above the name - positioned lower left, overlapping slightly */}
+                      {(formData.requestorSignature || requestData?.requestorSignature) ? (
+                        <div className="mb-0" style={{ marginBottom: '-8px', textAlign: 'left' }}>
+                          <img 
+                            src={formData.requestorSignature || requestData?.requestorSignature} 
+                            alt={`${getRequestorName()} Signature`} 
+                            className="h-auto"
+                            style={{ height: '40px', maxWidth: '300px', objectFit: 'contain', display: 'inline-block' }}
+                          />
+                        </div>
+                      ) : (
+                        isViewing && 
+                        !canEditReturned && 
+                        requestData?.status !== 'draft' && (
+                          <div className="mb-1">
+                            <p className="text-xs text-gray-400 italic">
+                              (No signature provided)
+                            </p>
                           </div>
+                        )
+                      )}
+                      
+                      {/* Name below signature */}
+                      <div className="text-left">
+                        {canEditSignature(true) ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTempRequestorSignature(formData.requestorSignature || requestData?.requestorSignature || '');
+                              setShowRequestorSignatureModal(true);
+                            }}
+                            className="text-sm font-semibold text-gray-900 hover:text-blue-600 hover:underline cursor-pointer transition-colors group relative"
+                            title="Click to edit signature"
+                          >
+                            {getRequestorName()}
+                            <span className="ml-1 text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">(edit)</span>
+                          </button>
                         ) : (
-                          <p className="text-xs text-gray-500 mt-1 block text-left">
-                            (No signature provided - Name only)
+                          <p className="text-sm font-semibold text-gray-900">
+                            {getRequestorName()}
+                          </p>
+                        )}
+                        {(requestData?.requestor?.title || (isCreating && user?.title)) && (
+                          <p className="text-xs text-gray-600 mt-1">
+                            {requestData?.requestor?.title || (isCreating ? user?.title : '')}
                           </p>
                         )}
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <SignaturePad
-                    value={formData.requestorSignature}
-                    onChange={(signature) => handleInputChange('requestorSignature', signature)}
-                    disabled={isViewing}
-                    requestorName={getRequestorName()}
-                  />
-                )}
+
+                  {/* Approvers Signatures */}
+                  {requestData?.approvals && requestData.approvals.map((approval, index) => {
+                    // Only show signature button if:
+                    // 1. Approval status is pending
+                    // 2. User is the approver
+                    // 3. User has permission to approve
+                    // 4. Approval doesn't already have a signature
+                    // 5. Request is not completed
+                    const isPendingApproval = approval.status === 'pending';
+                    const isCurrentApprover = approval.approver?.id === user?.id;
+                    const requestNotCompleted = requestData?.status !== 'completed';
+                    // Check if this approval has a signature (from backend or locally updated)
+                    const hasSignature = approval.signature && approval.signature.trim() !== '';
+                    const canSign = isPendingApproval && 
+                                   isCurrentApprover && 
+                                   requestNotCompleted &&
+                                   (requestData?.permissions?.canApprove || requestData?.permissions?.canProcess) &&
+                                   !hasSignature;
+                    
+                    return (
+                      <div key={approval.id} className="p-3">
+                        {/* Show signature button if current approver can sign */}
+                        {canSign && (
+                          <div className="mb-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // Set the current approval ID and load existing signature if any
+                                setCurrentApprovalId(approval.id);
+                                setTempApprovalSignature(approval.signature || approvalSignature || '');
+                                setShowApprovalSignatureModal(true);
+                              }}
+                              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-semibold"
+                            >
+                              <PenTool className="h-4 w-4 mr-2" />
+                              Add Signature
+                            </button>
+                          </div>
+                        )}
+                        
+                        {/* Display approver info */}
+                        <div className="pb-3 pt-4 min-h-[100px]">
+                          {/* Signature above the name - positioned lower left, overlapping slightly */}
+                          {/* Check approval.signature (from backend or locally updated via requestData state) */}
+                          {hasSignature ? (
+                            <div className="mb-0" style={{ marginBottom: '-8px', textAlign: 'left' }}>
+                              <img 
+                                src={approval.signature} 
+                                alt={`${approval.approver?.fullName || 'Approver'} Signature`} 
+                                className="h-auto"
+                                style={{ height: '40px', maxWidth: '300px', objectFit: 'contain', display: 'inline-block' }}
+                              />
+                            </div>
+                          ) : (
+                            !canSign && (
+                              <div className="mb-1">
+                                <p className="text-xs text-gray-400 italic">
+                                  (No signature provided)
+                                </p>
+                              </div>
+                            )
+                          )}
+                          
+                          {/* Name below signature - clickable to edit signature if allowed */}
+                          <div className="text-left">
+                            {canEditSignature(false, approval) ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCurrentApprovalId(approval.id);
+                                  setTempApprovalSignature(approval.signature || approvalSignature || '');
+                                  setShowApprovalSignatureModal(true);
+                                }}
+                                className="text-sm font-semibold text-gray-900 hover:text-blue-600 hover:underline cursor-pointer transition-colors group relative"
+                                title="Click to edit signature"
+                              >
+                                {approval.approver?.fullName || 'Pending Approver'}
+                                <span className="ml-1 text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">(edit)</span>
+                              </button>
+                            ) : (
+                              <p className="text-sm font-semibold text-gray-900">
+                                {approval.approver?.fullName || 'Pending Approver'}
+                              </p>
+                            )}
+                            {approval.approver?.title && (
+                              <p className="text-xs text-gray-600 mt-1">
+                                {approval.approver.title}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Show signature input for current approver who can approve but isn't in approvals list yet */}
+                  {isViewing && 
+                   requestData?.status !== 'completed' &&
+                   (requestData?.permissions?.canApprove || requestData?.permissions?.canProcess) &&
+                   (!requestData?.approvals || !requestData.approvals.some(a => a.approver?.id === user?.id && a.status === 'pending')) && (
+                    <div className="p-3">
+                      {!approvalSignature && (
+                        <div className="mb-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCurrentApprovalId(null); // No approval ID for pending approver
+                              setTempApprovalSignature(approvalSignature || '');
+                              setShowApprovalSignatureModal(true);
+                            }}
+                            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-semibold"
+                          >
+                            <PenTool className="h-4 w-4 mr-2" />
+                            Add Signature
+                          </button>
+                        </div>
+                      )}
+                      
+                      <div className="pb-3 pt-4 min-h-[100px]">
+                        {/* Signature above the name - positioned lower left, overlapping slightly */}
+                        {approvalSignature ? (
+                          <div className="mb-0" style={{ marginBottom: '-8px', textAlign: 'left' }}>
+                            <img 
+                              src={approvalSignature} 
+                              alt={`${user?.fullName || 'Approver'} Signature`} 
+                              className="h-auto"
+                              style={{ height: '40px', maxWidth: '300px', objectFit: 'contain', display: 'inline-block' }}
+                            />
+                          </div>
+                        ) : (
+                          <div className="mb-1">
+                            <p className="text-xs text-gray-400 italic">
+                              (No signature provided)
+                            </p>
+                          </div>
+                        )}
+                        
+                        {/* Name below signature */}
+                        <div className="text-left">
+                          {canEditSignature(false, { status: 'pending', approver: { id: user?.id } }) && 
+                           requestData?.status !== 'completed' &&
+                           !['department_declined', 'it_manager_declined'].includes(requestData?.status) ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCurrentApprovalId(null);
+                                setTempApprovalSignature(approvalSignature || '');
+                                setShowApprovalSignatureModal(true);
+                              }}
+                              className="text-sm font-semibold text-gray-900 hover:text-blue-600 hover:underline cursor-pointer transition-colors"
+                            >
+                              {user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim()}
+                            </button>
+                          ) : (
+                            <p className="text-sm font-semibold text-gray-900">
+                              {user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim()}
+                            </p>
+                          )}
+                          {user?.title && (
+                            <p className="text-xs text-gray-600 mt-1">
+                              {user.title}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -992,6 +1288,51 @@ const RequestForm = () => {
           </form>
         </div>
       </div>
+
+      {/* Requestor Signature Modal */}
+      <SignatureModal
+        isOpen={showRequestorSignatureModal}
+        onClose={() => {
+          setShowRequestorSignatureModal(false);
+          setTempRequestorSignature('');
+        }}
+        value={tempRequestorSignature}
+        onChange={(signature) => setTempRequestorSignature(signature)}
+        approverName={getRequestorName()}
+        approverTitle={user?.title || requestData?.requestor?.title || ''}
+        label="Requestor E-Signature"
+        onSave={() => {
+          handleInputChange('requestorSignature', tempRequestorSignature);
+        }}
+      />
+
+      {/* Approval Signature Modal */}
+      <SignatureModal
+        isOpen={showApprovalSignatureModal}
+        onClose={() => {
+          setShowApprovalSignatureModal(false);
+          setTempApprovalSignature('');
+          setCurrentApprovalId(null);
+        }}
+        value={tempApprovalSignature}
+        onChange={(signature) => setTempApprovalSignature(signature)}
+        approverName={user?.fullName || ''}
+        approverTitle={user?.title || ''}
+        label="Approver E-Signature"
+        onSave={() => {
+          // If we have a current approval ID, update that specific approval in requestData
+          if (currentApprovalId && requestData?.approvals) {
+            const updatedApprovals = requestData.approvals.map(approval => 
+              approval.id === currentApprovalId 
+                ? { ...approval, signature: tempApprovalSignature }
+                : approval
+            );
+            setRequestData({ ...requestData, approvals: updatedApprovals });
+          }
+          // Also set the approvalSignature for use when approving
+          setApprovalSignature(tempApprovalSignature);
+        }}
+      />
     </div>
   );
 };
