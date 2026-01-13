@@ -77,14 +77,31 @@ User.hasMany(Approval, {
   as: 'Approvals'
 });
 
-// ServiceVehicleRequest - User associations
+// ServiceVehicleRequest - User associations (requested_by)
 ServiceVehicleRequest.belongsTo(User, {
-  foreignKey: 'requestor_id',
-  as: 'Requestor'
+  foreignKey: 'requested_by',
+  as: 'RequestedByUser'
 });
 
 User.hasMany(ServiceVehicleRequest, {
-  foreignKey: 'requestor_id',
+  foreignKey: 'requested_by',
+  as: 'ServiceVehicleRequests'
+});
+
+// ServiceVehicleRequest - User associations (assigned_driver)
+ServiceVehicleRequest.belongsTo(User, {
+  foreignKey: 'assigned_driver',
+  as: 'AssignedDriverUser'
+});
+
+// ServiceVehicleRequest - Department associations
+ServiceVehicleRequest.belongsTo(Department, {
+  foreignKey: 'department_id',
+  as: 'Department'
+});
+
+Department.hasMany(ServiceVehicleRequest, {
+  foreignKey: 'department_id',
   as: 'ServiceVehicleRequests'
 });
 

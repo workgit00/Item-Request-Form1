@@ -250,13 +250,15 @@ const Dashboard = () => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 space-y-4 sm:space-y-0">
           <div className="flex space-x-4">
             {user.role === 'requestor' && (
-              <button
-                onClick={() => navigate('/requests/new')}
-                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                New Request
-              </button>
+              <>
+                <button
+                  onClick={() => navigate('/forms')}
+                  className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Request
+                </button>
+              </>
             )}
           </div>
 
