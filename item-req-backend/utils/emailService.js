@@ -16,14 +16,19 @@ class EmailService {
    * Similar to how the frontend auto-detects the backend URL
    */
   getFrontendUrl() {
-    // If FRONTEND_URL is explicitly set in .env, use it
-    if (process.env.FRONTEND_URL && process.env.FRONTEND_URL !== 'http://localhost:5173') {
+    // If FRONTEND_URL is explicitly set in .env, always use it
+    if (process.env.FRONTEND_URL) {
       return process.env.FRONTEND_URL;
     }
 
     // Otherwise, auto-detect based on server's network IP
     const networkIPs = this.getNetworkIPs();
-    const port = process.env.PORT || 3001;
+
+    // Determine port based on environment
+    // In development: frontend runs on Vite dev server (port 5173)
+    // In production: frontend is served by backend (port 3001)
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    const port = isDevelopment ? 5173 : (process.env.PORT || 3001);
 
     // Use the first available network IP, or fallback to localhost
     const host = networkIPs.length > 0 ? networkIPs[0] : 'localhost';
@@ -259,7 +264,7 @@ class EmailService {
           <div class="footer">
             <p>This is an automated notification. Please do not reply to this email.</p>
             <p style="margin-top: 10px;">
-              <a href="${process.env.FRONTEND_URL}/login" style="color: #2563eb; text-decoration: underline;">Access Login Portal</a>
+              <a href="${this.getFrontendUrl()}/login" style="color: #2563eb; text-decoration: underline;">Access Login Portal</a>
             </p>
           </div>
         </div>
@@ -314,7 +319,7 @@ class EmailService {
           <div class="footer">
             <p>This is an automated notification. Please do not reply to this email.</p>
             <p style="margin-top: 10px;">
-              <a href="${process.env.FRONTEND_URL}/login" style="color: #f59e0b; text-decoration: underline;">Access Login Portal</a>
+              <a href="${this.getFrontendUrl()}/login" style="color: #f59e0b; text-decoration: underline;">Access Login Portal</a>
             </p>
           </div>
         </div>
@@ -704,7 +709,7 @@ class EmailService {
           <div class="footer">
             <p>This is an automated message. Please do not reply to this email.</p>
             <p style="margin-top: 10px;">
-              <a href="${process.env.FRONTEND_URL}/login" style="color: #2563eb; text-decoration: underline;">Access Login Portal</a>
+              <a href="${this.getFrontendUrl()}/login" style="color: #2563eb; text-decoration: underline;">Access Login Portal</a>
             </p>
           </div>
         </div>
@@ -769,7 +774,7 @@ class EmailService {
           <div class="footer">
             <p>This is an automated message. Please do not reply to this email.</p>
             <p style="margin-top: 10px;">
-              <a href="${process.env.FRONTEND_URL}/login" style="color: #dc2626; text-decoration: underline;">Access Login Portal</a>
+              <a href="${this.getFrontendUrl()}/login" style="color: #dc2626; text-decoration: underline;">Access Login Portal</a>
             </p>
           </div>
         </div>
