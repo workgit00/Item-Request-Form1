@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
+import os from 'os';
 
 dotenv.config();
 
@@ -7,6 +8,47 @@ class EmailService {
   constructor() {
     this.transporter = null;
     this.initializeTransporter();
+  }
+
+  /**
+   * Get the frontend URL dynamically based on server's network IP
+   * This allows emails to work correctly whether accessed locally or from network
+   * Similar to how the frontend auto-detects the backend URL
+   */
+  getFrontendUrl() {
+    // If FRONTEND_URL is explicitly set in .env, use it
+    if (process.env.FRONTEND_URL && process.env.FRONTEND_URL !== 'http://localhost:5173') {
+      return process.env.FRONTEND_URL;
+    }
+
+    // Otherwise, auto-detect based on server's network IP
+    const networkIPs = this.getNetworkIPs();
+    const port = process.env.PORT || 3001;
+
+    // Use the first available network IP, or fallback to localhost
+    const host = networkIPs.length > 0 ? networkIPs[0] : 'localhost';
+
+    return `http://${host}:${port}`;
+  }
+
+  /**
+   * Get all network IP addresses of the server
+   * Returns an array of IPv4 addresses (excluding loopback)
+   */
+  getNetworkIPs() {
+    const interfaces = os.networkInterfaces();
+    const ips = [];
+
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name]) {
+        // Skip internal (loopback) and non-IPv4 addresses
+        if (iface.family === 'IPv4' && !iface.internal) {
+          ips.push(iface.address);
+        }
+      }
+    }
+
+    return ips;
   }
 
   initializeTransporter() {
@@ -25,6 +67,7 @@ class EmailService {
       });
 
       console.log('✅ Email service initialized');
+      console.log(`📧 Email links will use: ${this.getFrontendUrl()}`);
     } catch (error) {
       console.error('❌ Failed to initialize email service:', error.message);
     }
@@ -52,14 +95,14 @@ class EmailService {
       console.log(`   From: ${mailOptions.from}`);
 
       const info = await this.transporter.sendMail(mailOptions);
-      
+
       console.log(`✅ Email sent successfully!`);
       console.log(`   To: ${to}`);
       console.log(`   Message ID: ${info.messageId}`);
       console.log(`   Response: ${info.response || 'N/A'}`);
-      
-      return { 
-        success: true, 
+
+      return {
+        success: true,
         messageId: info.messageId,
         response: info.response,
         to: to,
@@ -72,9 +115,9 @@ class EmailService {
       console.error(`   Error: ${error.message}`);
       console.error(`   Error Code: ${error.code || 'N/A'}`);
       console.error(`   Error Stack: ${error.stack || 'N/A'}`);
-      
-      return { 
-        success: false, 
+
+      return {
+        success: false,
         error: error.message,
         code: error.code,
         to: to,
@@ -95,7 +138,7 @@ class EmailService {
 
       // Verify connection
       await this.transporter.verify();
-      
+
       return {
         success: true,
         message: 'Email service is configured correctly',
@@ -211,7 +254,7 @@ class EmailService {
             
             <p>Your request is now awaiting approval from ${departmentApprover?.first_name} ${departmentApprover?.last_name} (Department Approver).</p>
             
-            <a href="${process.env.FRONTEND_URL}/track?code=${request.request_number}" class="button">Track Your Request</a>
+            <a href="${this.getFrontendUrl()}/track?code=${request.request_number}" class="button">Track Your Request</a>
           </div>
           <div class="footer">
             <p>This is an automated notification. Please do not reply to this email.</p>
@@ -266,7 +309,7 @@ class EmailService {
               <span class="label">Submitted Date:</span> ${new Date(request.submitted_at || request.created_at).toLocaleString()}
             </div>
             
-            <a href="${process.env.FRONTEND_URL}/requests/${request.id}" class="button">Review Request</a>
+            <a href="${this.getFrontendUrl()}/requests/${request.id}" class="button">Review Request</a>
           </div>
           <div class="footer">
             <p>This is an automated notification. Please do not reply to this email.</p>
@@ -286,10 +329,10 @@ class EmailService {
       'it_manager_approval': 'IT Manager Approval',
       'service_desk_processing': 'Service Desk Processing'
     };
-    
-    const nextStage = stage === 'department_approval' ? 'IT Manager' : 
-                     stage === 'it_manager_approval' ? 'Service Desk' : 
-                     'Completed';
+
+    const nextStage = stage === 'department_approval' ? 'IT Manager' :
+      stage === 'it_manager_approval' ? 'Service Desk' :
+        'Completed';
 
     return `
       <!DOCTYPE html>
@@ -329,12 +372,12 @@ class EmailService {
             <p>Your request is now pending ${nextStage} review.</p>
             `}
             
-            <a href="${process.env.FRONTEND_URL}/track?code=${request.request_number}" class="button">View Request Status</a>
+            <a href="${this.getFrontendUrl()}/track?code=${request.request_number}" class="button">View Request Status</a>
           </div>
           <div class="footer">
             <p>This is an automated notification. Please do not reply to this email.</p>
             <p style="margin-top: 10px;">
-              <a href="${process.env.FRONTEND_URL}/login" style="color: #10b981; text-decoration: underline;">Access Login Portal</a>
+              <a href="${this.getFrontendUrl()}/login" style="color: #10b981; text-decoration: underline;">Access Login Portal</a>
             </p>
           </div>
         </div>
@@ -383,12 +426,12 @@ class EmailService {
             </div>
             ` : ''}
             
-            <a href="${process.env.FRONTEND_URL}/track?code=${request.request_number}" class="button">View Request Details</a>
+            <a href="${this.getFrontendUrl()}/track?code=${request.request_number}" class="button">View Request Details</a>
           </div>
           <div class="footer">
             <p>This is an automated notification. Please do not reply to this email.</p>
             <p style="margin-top: 10px;">
-              <a href="${process.env.FRONTEND_URL}/login" style="color: #ef4444; text-decoration: underline;">Access Login Portal</a>
+              <a href="${this.getFrontendUrl()}/login" style="color: #ef4444; text-decoration: underline;">Access Login Portal</a>
             </p>
           </div>
         </div>
@@ -436,7 +479,7 @@ class EmailService {
             
             <p>Please review the comments above and update your request accordingly.</p>
             
-            <a href="${process.env.FRONTEND_URL}/requests/${request.id}" class="button">Update Request</a>
+            <a href="${this.getFrontendUrl()}/requests/${request.id}" class="button">Update Request</a>
           </div>
           <div class="footer">
             <p>This is an automated notification. Please do not reply to this email.</p>
@@ -459,7 +502,7 @@ class EmailService {
 
     const subject = `Request Submitted: ${request.request_number}`;
     const html = this.getRequestSubmittedTemplate(request, requestor, departmentApprover);
-    
+
     return await this.sendEmail(requestor.email, subject, html);
   }
 
@@ -471,7 +514,7 @@ class EmailService {
 
     const subject = `Action Required: Approve Request ${request.request_number}`;
     const html = this.getApprovalRequestTemplate(request, requestor, approver);
-    
+
     return await this.sendEmail(approver.email, subject, html);
   }
 
@@ -483,7 +526,7 @@ class EmailService {
 
     const subject = `Request Approved: ${request.request_number}`;
     const html = this.getRequestApprovedTemplate(request, requestor, approver, stage);
-    
+
     return await this.sendEmail(requestor.email, subject, html);
   }
 
@@ -495,7 +538,7 @@ class EmailService {
 
     const subject = `Request Declined: ${request.request_number}`;
     const html = this.getRequestDeclinedTemplate(request, requestor, approver, comments);
-    
+
     return await this.sendEmail(requestor.email, subject, html);
   }
 
@@ -507,7 +550,7 @@ class EmailService {
 
     const subject = `Request Returned for Revision: ${request.request_number}`;
     const html = this.getRequestReturnedTemplate(request, requestor, approver, returnReason);
-    
+
     return await this.sendEmail(requestor.email, subject, html);
   }
 
@@ -521,7 +564,7 @@ class EmailService {
     const subject = `Vehicle Request Submitted: ${vehicleRequest.reference_code || vehicleRequest.id}`;
     const html = this.getVehicleRequestSubmittedTemplate(vehicleRequest, requestor, departmentApprover);
     const attachments = await this.prepareAttachments(vehicleRequest.attachments);
-    
+
     return await this.sendEmail(requestor.email, subject, html, null, attachments);
   }
 
@@ -534,7 +577,7 @@ class EmailService {
     const subject = `Action Required: Approve Vehicle Request ${vehicleRequest.reference_code || vehicleRequest.id}`;
     const html = this.getVehicleApprovalRequestTemplate(vehicleRequest, requestor, approver);
     const attachments = await this.prepareAttachments(vehicleRequest.attachments);
-    
+
     return await this.sendEmail(approver.email, subject, html, null, attachments);
   }
 
@@ -544,12 +587,12 @@ class EmailService {
       return;
     }
 
-    const subject = isCompleted 
+    const subject = isCompleted
       ? `Vehicle Request Approved: ${vehicleRequest.reference_code || vehicleRequest.id}`
       : `Vehicle Request Approved - Pending Next Approval: ${vehicleRequest.reference_code || vehicleRequest.id}`;
     const html = this.getVehicleRequestApprovedTemplate(vehicleRequest, requestor, approver, isCompleted, nextApprover, approverComments);
     const attachments = await this.prepareAttachments(vehicleRequest.attachments);
-    
+
     return await this.sendEmail(requestor.email, subject, html, null, attachments);
   }
 
@@ -562,7 +605,7 @@ class EmailService {
     const subject = `Vehicle Request Declined: ${vehicleRequest.reference_code || vehicleRequest.id}`;
     const html = this.getVehicleRequestDeclinedTemplate(vehicleRequest, requestor, approver, comments);
     const attachments = await this.prepareAttachments(vehicleRequest.attachments);
-    
+
     return await this.sendEmail(requestor.email, subject, html, null, attachments);
   }
 
@@ -575,7 +618,7 @@ class EmailService {
     const subject = `Vehicle Request Returned for Revision: ${vehicleRequest.reference_code || vehicleRequest.id}`;
     const html = this.getVehicleRequestReturnedTemplate(vehicleRequest, requestor, approver, returnReason);
     const attachments = await this.prepareAttachments(vehicleRequest.attachments);
-    
+
     return await this.sendEmail(requestor.email, subject, html, null, attachments);
   }
 
@@ -589,7 +632,7 @@ class EmailService {
     const path = await import('path');
     const { fileURLToPath } = await import('url');
     const { dirname } = await import('path');
-    
+
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
     const uploadsDir = path.join(__dirname, '..', 'uploads', 'vehicle-requests');
@@ -598,7 +641,7 @@ class EmailService {
 
     for (const attachment of attachments) {
       const filePath = path.join(uploadsDir, attachment.filename);
-      
+
       if (fs.existsSync(filePath)) {
         emailAttachments.push({
           filename: attachment.originalName || attachment.filename,
@@ -614,10 +657,10 @@ class EmailService {
 
   // Vehicle Request Email Templates
   getVehicleRequestSubmittedTemplate(vehicleRequest, requestor, departmentApprover) {
-    const requestorName = requestor.first_name && requestor.last_name 
-      ? `${requestor.first_name} ${requestor.last_name}` 
+    const requestorName = requestor.first_name && requestor.last_name
+      ? `${requestor.first_name} ${requestor.last_name}`
       : requestor.username || vehicleRequest.requestor_name;
-    
+
     return `
       <!DOCTYPE html>
       <html>
@@ -671,10 +714,10 @@ class EmailService {
   }
 
   getVehicleApprovalRequestTemplate(vehicleRequest, requestor, approver) {
-    const requestorName = requestor.first_name && requestor.last_name 
-      ? `${requestor.first_name} ${requestor.last_name}` 
+    const requestorName = requestor.first_name && requestor.last_name
+      ? `${requestor.first_name} ${requestor.last_name}`
       : requestor.username || vehicleRequest.requestor_name;
-    
+
     return `
       <!DOCTYPE html>
       <html>
@@ -720,7 +763,7 @@ class EmailService {
             
             <p>Please review and approve or decline this request in the system.</p>
             <p style="margin-top: 15px;">
-              <a href="${process.env.FRONTEND_URL}/login" style="display: inline-block; padding: 10px 20px; background-color: #dc2626; color: white; text-decoration: none; border-radius: 5px;">Access Login Portal</a>
+              <a href="${this.getFrontendUrl()}/login" style="display: inline-block; padding: 10px 20px; background-color: #dc2626; color: white; text-decoration: none; border-radius: 5px;">Access Login Portal</a>
             </p>
           </div>
           <div class="footer">
@@ -736,19 +779,19 @@ class EmailService {
   }
 
   getVehicleRequestApprovedTemplate(vehicleRequest, requestor, approver, isCompleted = true, nextApprover = null, approverComments = null) {
-    const requestorName = requestor.first_name && requestor.last_name 
-      ? `${requestor.first_name} ${requestor.last_name}` 
+    const requestorName = requestor.first_name && requestor.last_name
+      ? `${requestor.first_name} ${requestor.last_name}`
       : requestor.username || vehicleRequest.requestor_name;
-    const approverName = approver.first_name && approver.last_name 
-      ? `${approver.first_name} ${approver.last_name}` 
+    const approverName = approver.first_name && approver.last_name
+      ? `${approver.first_name} ${approver.last_name}`
       : approver.username;
     const nextApproverName = nextApprover && nextApprover.first_name && nextApprover.last_name
       ? `${nextApprover.first_name} ${nextApprover.last_name}`
       : nextApprover?.username || nextApprover?.email || 'the next approver';
-    
+
     // Use approverComments if provided, otherwise fall back to vehicleRequest.comments
     const commentsToShow = approverComments || vehicleRequest.comments;
-    
+
     return `
       <!DOCTYPE html>
       <html>
@@ -800,7 +843,7 @@ class EmailService {
           <div class="footer">
             <p>This is an automated message. Please do not reply to this email.</p>
             <p style="margin-top: 10px;">
-              <a href="${process.env.FRONTEND_URL}/login" style="color: #16a34a; text-decoration: underline;">Access Login Portal</a>
+              <a href="${this.getFrontendUrl()}/login" style="color: #16a34a; text-decoration: underline;">Access Login Portal</a>
             </p>
           </div>
         </div>
@@ -810,13 +853,13 @@ class EmailService {
   }
 
   getVehicleRequestDeclinedTemplate(vehicleRequest, requestor, approver, comments) {
-    const requestorName = requestor.first_name && requestor.last_name 
-      ? `${requestor.first_name} ${requestor.last_name}` 
+    const requestorName = requestor.first_name && requestor.last_name
+      ? `${requestor.first_name} ${requestor.last_name}`
       : requestor.username || vehicleRequest.requestor_name;
-    const approverName = approver.first_name && approver.last_name 
-      ? `${approver.first_name} ${approver.last_name}` 
+    const approverName = approver.first_name && approver.last_name
+      ? `${approver.first_name} ${approver.last_name}`
       : approver.username;
-    
+
     return `
       <!DOCTYPE html>
       <html>
@@ -864,13 +907,13 @@ class EmailService {
   }
 
   getVehicleRequestReturnedTemplate(vehicleRequest, requestor, approver, returnReason) {
-    const requestorName = requestor.first_name && requestor.last_name 
-      ? `${requestor.first_name} ${requestor.last_name}` 
+    const requestorName = requestor.first_name && requestor.last_name
+      ? `${requestor.first_name} ${requestor.last_name}`
       : requestor.username || vehicleRequest.requestor_name;
-    const approverName = approver.first_name && approver.last_name 
-      ? `${approver.first_name} ${approver.last_name}` 
+    const approverName = approver.first_name && approver.last_name
+      ? `${approver.first_name} ${approver.last_name}`
       : approver.username;
-    
+
     return `
       <!DOCTYPE html>
       <html>
@@ -918,13 +961,13 @@ class EmailService {
   }
 
   getVehicleAttachmentUploadedTemplate(vehicleRequest, requestor, uploadedBy, attachmentCount) {
-    const requestorName = requestor.first_name && requestor.last_name 
-      ? `${requestor.first_name} ${requestor.last_name}` 
+    const requestorName = requestor.first_name && requestor.last_name
+      ? `${requestor.first_name} ${requestor.last_name}`
       : requestor.username || vehicleRequest.requestor_name;
-    const uploaderName = uploadedBy.first_name && uploadedBy.last_name 
-      ? `${uploadedBy.first_name} ${uploadedBy.last_name}` 
+    const uploaderName = uploadedBy.first_name && uploadedBy.last_name
+      ? `${uploadedBy.first_name} ${uploadedBy.last_name}`
       : uploadedBy.username;
-    
+
     return `
       <!DOCTYPE html>
       <html>
@@ -972,7 +1015,7 @@ class EmailService {
           <div class="footer">
             <p>This is an automated message. Please do not reply to this email.</p>
             <p style="margin-top: 10px;">
-              <a href="${process.env.FRONTEND_URL}/login" style="color: #3b82f6; text-decoration: underline;">Access Login Portal</a>
+              <a href="${this.getFrontendUrl()}/login" style="color: #3b82f6; text-decoration: underline;">Access Login Portal</a>
             </p>
           </div>
         </div>
@@ -987,7 +1030,7 @@ class EmailService {
     console.log('   Requestor object:', JSON.stringify(requestor, null, 2));
     console.log('   Requestor email:', requestor?.email);
     console.log('   Requestor email (alternative):', requestor?.email || requestor?.Email);
-    
+
     if (!requestor?.email) {
       console.log(`⚠️ Skipping email - requestor has no email`);
       console.log(`   Available requestor fields:`, Object.keys(requestor || {}));
@@ -996,10 +1039,10 @@ class EmailService {
 
     const subject = `New Attachments Added: ${vehicleRequest.reference_code || vehicleRequest.id}`;
     const html = this.getVehicleAttachmentUploadedTemplate(vehicleRequest, requestor, uploadedBy, attachmentCount);
-    
+
     // Prepare only the newly uploaded attachments for email
     const emailAttachments = await this.prepareAttachments(newAttachments);
-    
+
     return await this.sendEmail(requestor.email, subject, html, null, emailAttachments);
   }
 }
