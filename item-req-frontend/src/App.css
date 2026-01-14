@@ -218,11 +218,11 @@
   .no-print {
     display: none !important;
   }
-  
+
   .print-break {
     page-break-after: always;
   }
-  
+
   .print-break-inside-avoid {
     page-break-inside: avoid;
   }

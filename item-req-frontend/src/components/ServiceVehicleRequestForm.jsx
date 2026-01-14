@@ -875,9 +875,8 @@ export default function ServiceVehicleRequestForm() {
                   {field.label}
                 </label>
                 <div
-                  className={`border-b-2 pb-1 ${
-                    errors[field.name] ? "border-red-500" : "border-gray-400"
-                  }`}
+                  className={`border-b-2 pb-1 ${errors[field.name] ? "border-red-500" : "border-gray-400"
+                    }`}
                 >
                   <input
                     type={field.type}
@@ -1005,9 +1004,8 @@ export default function ServiceVehicleRequestForm() {
         ...baseProps,
         disabled: true,
         readOnly: true,
-        className: `${
-          baseProps.className || ""
-        } bg-gray-50 cursor-not-allowed`.trim(),
+        className: `${baseProps.className || ""
+          } bg-gray-50 cursor-not-allowed`.trim(),
       };
     }
     return baseProps;
@@ -1179,11 +1177,10 @@ export default function ServiceVehicleRequestForm() {
                     Date Prepared
                   </label>
                   <div
-                    className={`border-b-2 pb-1 ${
-                      errors.date_prepared
+                    className={`border-b-2 pb-1 ${errors.date_prepared
                         ? "border-red-500"
                         : "border-gray-400"
-                    }`}
+                      }`}
                   >
                     <input
                       type="date"
@@ -1235,11 +1232,10 @@ export default function ServiceVehicleRequestForm() {
                     Contact Number <span className="text-red-600">*</span>
                   </label>
                   <div
-                    className={`border-b-2 pb-1 ${
-                      errors.contact_number
+                    className={`border-b-2 pb-1 ${errors.contact_number
                         ? "border-red-500"
                         : "border-gray-400"
-                    }`}
+                      }`}
                   >
                     <input
                       type="tel"
@@ -1401,11 +1397,10 @@ export default function ServiceVehicleRequestForm() {
                       License Number
                     </label>
                     <div
-                      className={`border-b-2 pb-1 ${
-                        errors.license_number
+                      className={`border-b-2 pb-1 ${errors.license_number
                           ? "border-red-500"
                           : "border-gray-400"
-                      }`}
+                        }`}
                     >
                       <input
                         type="text"
@@ -1433,11 +1428,10 @@ export default function ServiceVehicleRequestForm() {
                       License Expiration Date
                     </label>
                     <div
-                      className={`border-b-2 pb-1 ${
-                        errors.expiration_date
+                      className={`border-b-2 pb-1 ${errors.expiration_date
                           ? "border-red-500"
                           : "border-gray-400"
-                      }`}
+                        }`}
                     >
                       <input
                         type="date"
@@ -1498,11 +1492,10 @@ export default function ServiceVehicleRequestForm() {
                     Date
                   </label>
                   <div
-                    className={`border-b-2 pb-1 ${
-                      errors.requested_by_date
+                    className={`border-b-2 pb-1 ${errors.requested_by_date
                         ? "border-red-500"
                         : "border-gray-400"
-                    }`}
+                      }`}
                   >
                     <input
                       type="date"
@@ -1597,8 +1590,8 @@ export default function ServiceVehicleRequestForm() {
                       <div className="text-sm text-gray-500">
                         {formData.approval_date
                           ? new Date(
-                              formData.approval_date
-                            ).toLocaleDateString()
+                            formData.approval_date
+                          ).toLocaleDateString()
                           : "-"}
                       </div>
                     </div>
@@ -1643,7 +1636,7 @@ export default function ServiceVehicleRequestForm() {
                         {selectedVehicle
                           ? `${selectedVehicle.plate} - ${selectedVehicle.year} ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.seaters} seaters)`
                           : formData.assigned_vehicle
-                          ? (() => {
+                            ? (() => {
                               const vehicle = availableVehicles.find(
                                 (v) =>
                                   v.id === parseInt(formData.assigned_vehicle)
@@ -1652,7 +1645,7 @@ export default function ServiceVehicleRequestForm() {
                                 ? `${vehicle.plate} - ${vehicle.year} ${vehicle.make} ${vehicle.model} (${vehicle.seaters} seaters)`
                                 : "-";
                             })()
-                          : "-"}
+                            : "-"}
                       </div>
                     </div>
                   )}
@@ -1855,56 +1848,56 @@ export default function ServiceVehicleRequestForm() {
                 }
                 return canApprove;
               })() && (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleReturn}
-                    disabled={loading}
-                    className="flex items-center px-6 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:opacity-50 text-sm font-semibold"
-                  >
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                    Return
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDecline}
-                    disabled={loading}
-                    className="flex items-center px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 text-sm font-semibold"
-                  >
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Decline
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleApprove}
-                    disabled={
-                      loading ||
-                      (isODHCUser &&
-                        !(
-                          formData.assigned_driver &&
-                          formData.assigned_driver.trim() &&
-                          formData.assigned_vehicle &&
-                          formData.approval_date
-                        ))
-                    }
-                    className="flex items-center px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
-                    title={
-                      isODHCUser &&
-                      !(
-                        formData.assigned_driver &&
-                        formData.assigned_driver.trim() &&
-                        formData.assigned_vehicle &&
-                        formData.approval_date
-                      )
-                        ? "Please complete Section 4 (Assigned Driver, Assigned Vehicle, and Approval Date) before approving"
-                        : ""
-                    }
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Approve & Complete
-                  </button>
-                </>
-              )}
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleReturn}
+                      disabled={loading}
+                      className="flex items-center px-6 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:opacity-50 text-sm font-semibold"
+                    >
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      Return
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDecline}
+                      disabled={loading}
+                      className="flex items-center px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 text-sm font-semibold"
+                    >
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Decline
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleApprove}
+                      disabled={
+                        loading ||
+                        (isODHCUser &&
+                          !(
+                            formData.assigned_driver &&
+                            formData.assigned_driver.trim() &&
+                            formData.assigned_vehicle &&
+                            formData.approval_date
+                          ))
+                      }
+                      className="flex items-center px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
+                      title={
+                        isODHCUser &&
+                          !(
+                            formData.assigned_driver &&
+                            formData.assigned_driver.trim() &&
+                            formData.assigned_vehicle &&
+                            formData.approval_date
+                          )
+                          ? "Please complete Section 4 (Assigned Driver, Assigned Vehicle, and Approval Date) before approving"
+                          : ""
+                      }
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Approve & Complete
+                    </button>
+                  </>
+                )}
             </div>
           </form>
         </div>
