@@ -24,11 +24,8 @@ class EmailService {
     // Otherwise, auto-detect based on server's network IP
     const networkIPs = this.getNetworkIPs();
 
-    // Determine port based on environment
-    // In development: frontend runs on Vite dev server (port 5173)
-    // In production: frontend is served by backend (port 3001)
-    const isDevelopment = process.env.NODE_ENV === 'development';
-    const port = isDevelopment ? 5173 : (process.env.PORT || 3001);
+    // Always use port 5173 for frontend (Vite dev server)
+    const port = 5173;
 
     // Use the first available network IP, or fallback to localhost
     const host = networkIPs.length > 0 ? networkIPs[0] : 'localhost';
