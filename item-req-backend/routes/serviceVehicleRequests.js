@@ -25,7 +25,7 @@ const router = express.Router();
 // Helper function to build order clause for sorting vehicle requests
 function buildVehicleOrderClause(sortBy, sortOrder) {
   const order = sortOrder?.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
-  
+
   switch (sortBy) {
     case 'status':
       return [['status', order], ['created_at', 'DESC']];
@@ -49,7 +49,7 @@ router.post(
   async (req, res) => {
     try {
       const { id } = req.params;
-      
+
       if (!req.files || req.files.length === 0) {
         return res.status(400).json({
           success: false,
@@ -75,24 +75,39 @@ router.post(
       }
 
       // Check if user has permission to upload attachments
-      // Only approvers (department_approver) and super_administrator can upload attachments
-      // Requestors cannot upload attachments
+      // Requestors can upload attachments on their own requests (when status is draft or returned)
+      // Approvers (department_approver and super_administrator) can upload attachments on any request
       const isApprover = req.user.role === 'department_approver' || req.user.role === 'super_administrator';
-      
-      if (!isApprover) {
+      const isRequestor = req.user.id === request.requested_by;
+
+      if (!isApprover && !isRequestor) {
         return res.status(403).json({
           success: false,
-          message: "Only approvers can upload attachments"
+          message: "You do not have permission to upload attachments for this request"
         });
       }
 
-      // Allow attachment uploads for submitted, returned, department_approved, or completed requests
-      // ODHC users need to upload attachments during the approval process (department_approved status), not just after completion
-      if (!['submitted', 'returned', 'department_approved', 'completed'].includes(request.status)) {
-        return res.status(400).json({
-          success: false,
-          message: "Attachments can only be uploaded for submitted, returned, department_approved, or completed requests"
-        });
+      // Requestors can upload attachments when status is draft or returned
+      // Approvers can upload attachments when status is submitted, returned, department_approved, or completed
+      const allowedStatusesForRequestor = ['draft', 'returned'];
+      const allowedStatusesForApprover = ['submitted', 'returned', 'department_approved', 'completed'];
+
+      if (isRequestor && !isApprover) {
+        // Requestor uploading on their own request
+        if (!allowedStatusesForRequestor.includes(request.status)) {
+          return res.status(400).json({
+            success: false,
+            message: "You can only upload attachments when the request is in draft or returned status"
+          });
+        }
+      } else if (isApprover) {
+        // Approver uploading
+        if (!allowedStatusesForApprover.includes(request.status)) {
+          return res.status(400).json({
+            success: false,
+            message: "Attachments can only be uploaded for submitted, returned, department_approved, or completed requests"
+          });
+        }
       }
 
       // Prepare attachment metadata
@@ -120,10 +135,10 @@ router.post(
         // Use the request we already loaded with relations
         if (request?.RequestedByUser) {
           // Convert to plain object to ensure all fields are accessible
-          const requestedByUser = request.RequestedByUser.toJSON 
-            ? request.RequestedByUser.toJSON() 
+          const requestedByUser = request.RequestedByUser.toJSON
+            ? request.RequestedByUser.toJSON()
             : request.RequestedByUser;
-          
+
           const requestorData = {
             ...requestedByUser,
             firstName: requestedByUser.first_name,
@@ -131,19 +146,19 @@ router.post(
             fullName: `${requestedByUser.first_name} ${requestedByUser.last_name}`,
             email: requestedByUser.email // Explicitly include email
           };
-          
+
           // Debug logging
           console.log('📧 Attachment upload email notification:');
           console.log('   Requestor email:', requestorData.email);
           console.log('   Requestor name:', requestorData.fullName);
           console.log('   Request ID:', id);
           console.log('   RequestedByUser raw:', JSON.stringify(requestedByUser, null, 2));
-          
+
           // Reload request to get updated attachments
           const requestWithAttachments = await ServiceVehicleRequest.findByPk(id);
           const requestData = requestWithAttachments.toJSON ? requestWithAttachments.toJSON() : requestWithAttachments;
           requestData.attachments = updatedAttachments; // Include all attachments including new ones
-          
+
           await emailService.notifyVehicleAttachmentUploaded(
             requestData,
             requestorData,
@@ -184,7 +199,7 @@ router.delete(
   async (req, res) => {
     try {
       const { id, filename } = req.params;
-      
+
       const request = await ServiceVehicleRequest.findByPk(id);
       if (!request) {
         return res.status(404).json({
@@ -194,13 +209,23 @@ router.delete(
       }
 
       // Check if user has permission to delete attachments
-      // Only approvers (department_approver) and super_administrator can delete attachments
+      // Requestors can delete attachments on their own requests (when status is draft or returned)
+      // Approvers (department_approver and super_administrator) can delete attachments on any request
       const isApprover = req.user.role === 'department_approver' || req.user.role === 'super_administrator';
-      
-      if (!isApprover) {
+      const isRequestor = req.user.id === request.requested_by;
+
+      if (!isApprover && !isRequestor) {
         return res.status(403).json({
           success: false,
-          message: "Only approvers can delete attachments"
+          message: "You do not have permission to delete attachments for this request"
+        });
+      }
+
+      // Requestors can only delete attachments when status is draft or returned
+      if (isRequestor && !isApprover && !['draft', 'returned'].includes(request.status)) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only delete attachments when the request is in draft or returned status"
         });
       }
 
@@ -276,12 +301,12 @@ router.get("/", authenticateToken, async (req, res) => {
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    let whereClause = {};
+    let roleAccessClause = {};
 
     // Role-based filtering
     if (req.user.role === "requestor") {
       // Requestors can only see their own requests
-      whereClause.requested_by = req.user.id;
+      roleAccessClause.requested_by = req.user.id;
     } else if (req.user.role === "department_approver") {
       // For vehicle requests, ODHC department approvers should see ALL requests
       // (since all vehicle requests are routed to ODHC)
@@ -292,21 +317,40 @@ router.get("/", authenticateToken, async (req, res) => {
           is_active: true,
         },
       });
-      
+
       if (odhcDepartment && req.user.department_id === odhcDepartment.id) {
         // ODHC department approver can see all vehicle requests
-        // No where clause restriction
+        // But should only see 'submitted' requests from their own department
+        roleAccessClause = {
+          [Op.or]: [
+            { status: ['department_approved', 'completed', 'returned', 'declined'] },
+            {
+              status: 'submitted',
+              department_id: req.user.department_id
+            }
+          ]
+        };
       } else {
         // Other department approvers can see requests from their department
-      whereClause.department_id = req.user.department_id;
+        roleAccessClause.department_id = req.user.department_id;
       }
-    } else if (
-      ["it_manager", "service_desk", "super_administrator"].includes(
-        req.user.role
-      )
-    ) {
-      // IT managers, service desk, and super admins can see all requests
-      // No where clause restriction
+    }
+
+    // Construct final where clause combining role access and verifier access
+    let whereClause = {};
+    if (["it_manager", "service_desk", "super_administrator"].includes(req.user.role)) {
+      // Unrestricted access
+    } else {
+      // Restricted access: Role OR Assigned Verifier
+      whereClause = {
+        [Op.or]: [
+          roleAccessClause,
+          {
+            verifier_id: req.user.id,
+            verification_status: 'pending'
+          }
+        ]
+      };
     }
 
     // Status filter
@@ -364,7 +408,7 @@ router.get("/", authenticateToken, async (req, res) => {
     // Map vehicle requests to include camelCase user fields and approvals
     const mappedRequests = await Promise.all(rows.map(async (request) => {
       const requestData = request.toJSON ? request.toJSON() : request;
-      
+
       // Map RequestedByUser
       if (requestData.RequestedByUser) {
         requestData.RequestedByUser = {
@@ -374,7 +418,7 @@ router.get("/", authenticateToken, async (req, res) => {
           fullName: `${requestData.RequestedByUser.first_name} ${requestData.RequestedByUser.last_name}`
         };
       }
-      
+
       // Map Approvals
       if (requestData.Approvals) {
         requestData.approvals = requestData.Approvals.map(approval => ({
@@ -396,7 +440,7 @@ router.get("/", authenticateToken, async (req, res) => {
       } else {
         requestData.approvals = [];
       }
-      
+
       // Check if request is pending current user's approval using workflow
       // Skip if request is completed, declined, or draft
       if (!['completed', 'declined', 'draft'].includes(requestData.status)) {
@@ -404,31 +448,31 @@ router.get("/", authenticateToken, async (req, res) => {
           const currentStep = await findCurrentStepForApprover('vehicle_request', req.user, requestData.status, {
             department_id: requestData.department_id
           });
-          
+
           if (currentStep) {
             // This request is pending the current user's approval
             requestData.isPendingMyApproval = true;
           } else {
             // Check if there's a pending approval record for this user
-            requestData.isPendingMyApproval = requestData.approvals.some(approval => 
-              approval.status === 'pending' && 
-              approval.approver && 
+            requestData.isPendingMyApproval = requestData.approvals.some(approval =>
+              approval.status === 'pending' &&
+              approval.approver &&
               approval.approver.id === req.user.id
             );
           }
         } catch (error) {
           console.error('Error checking pending approval:', error);
           // Fallback to checking approvals array
-          requestData.isPendingMyApproval = requestData.approvals.some(approval => 
-            approval.status === 'pending' && 
-            approval.approver && 
+          requestData.isPendingMyApproval = requestData.approvals.some(approval =>
+            approval.status === 'pending' &&
+            approval.approver &&
             approval.approver.id === req.user.id
           );
         }
       } else {
         requestData.isPendingMyApproval = false;
       }
-      
+
       return requestData;
     }));
 
@@ -476,6 +520,11 @@ router.get("/:id", authenticateToken, async (req, res) => {
           as: "Department",
           attributes: ["id", "name"],
         },
+        {
+          model: User,
+          as: "Verifier",
+          attributes: ["id", "first_name", "last_name"]
+        },
       ],
     });
 
@@ -488,7 +537,7 @@ router.get("/:id", authenticateToken, async (req, res) => {
 
     // Check access permissions
     let hasAccess = false;
-    
+
     if (req.user.id === request.requested_by) {
       // Requestor can always see their own request
       hasAccess = true;
@@ -504,7 +553,7 @@ router.get("/:id", authenticateToken, async (req, res) => {
           is_active: true,
         },
       });
-      
+
       if (odhcDepartment && req.user.department_id === odhcDepartment.id) {
         // ODHC department approver can see all vehicle requests
         hasAccess = true;
@@ -517,6 +566,11 @@ router.get("/:id", authenticateToken, async (req, res) => {
       hasAccess = true;
     }
 
+    if (request.verifier_id === req.user.id && request.verification_status === 'pending') {
+      // Assigned verifier can see request
+      hasAccess = true;
+    }
+
     if (!hasAccess) {
       return res.status(403).json({
         success: false,
@@ -526,7 +580,7 @@ router.get("/:id", authenticateToken, async (req, res) => {
 
     // Map request to include camelCase user fields
     const requestData = request.toJSON ? request.toJSON() : request;
-    
+
     // Map RequestedByUser
     if (requestData.RequestedByUser) {
       requestData.RequestedByUser = {
@@ -643,6 +697,8 @@ router.post(
         expiration_date,
         comments,
         status,
+        urgency_justification,
+        requestor_signature,
       } = req.body;
 
       // Process passengers array - filter out empty entries and keep only those with names
@@ -692,6 +748,8 @@ router.post(
         reference_code: generateReferenceCode(),
         status: status === "draft" ? "draft" : "submitted",
         comments: comments || null,
+        urgency_justification: urgency_justification || null,
+        requestor_signature: requestor_signature || null,
       };
 
       const newRequest = await ServiceVehicleRequest.create(sanitizedData);
@@ -773,6 +831,8 @@ router.put("/:id", authenticateToken, async (req, res) => {
       "expiration_date",
       "comments",
       "status",
+      "urgency_justification",
+      "requestor_signature",
     ];
 
     updateFields.forEach((field) => {
@@ -802,6 +862,8 @@ router.put("/:id", authenticateToken, async (req, res) => {
             "destination_car",
             "license_number",
             "comments",
+            "urgency_justification",
+            "requestor_signature",
           ].includes(field)
         ) {
           request[field] = req.body[field] || null;
@@ -882,7 +944,7 @@ router.post("/:id/submit", authenticateToken, async (req, res) => {
     });
 
     let departmentApprover = null;
-    
+
     if (workflowResult && workflowResult.approver) {
       // Use approver from workflow
       departmentApprover = workflowResult.approver;
@@ -993,7 +1055,7 @@ router.post(
       // Use workflow system to determine which statuses can be approved
       const workflow = await getActiveWorkflow('vehicle_request');
       let allowedStatuses = ["submitted", "returned"];
-      
+
       if (workflow && workflow.Steps && workflow.Steps.length > 0) {
         // Build list of allowed statuses based on workflow steps
         // Include 'submitted' and 'returned' for first step
@@ -1001,7 +1063,7 @@ router.post(
         const statusOnApprovalValues = workflow.Steps.map(step => step.status_on_approval).filter(Boolean);
         allowedStatuses = ["submitted", "returned", ...statusOnApprovalValues];
       }
-      
+
       if (!allowedStatuses.includes(request.status)) {
         return res.status(400).json({
           success: false,
@@ -1026,15 +1088,15 @@ router.post(
           });
         }
 
-  if (
-  request.assigned_vehicle === null ||
-  request.assigned_vehicle === undefined
-) {
-  return res.status(400).json({
-    success: false,
-    message: "Please fill in the Assigned Vehicle field in Section 4 before approving",
-  });
-}
+        if (
+          request.assigned_vehicle === null ||
+          request.assigned_vehicle === undefined
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: "Please fill in the Assigned Vehicle field in Section 4 before approving",
+          });
+        }
 
 
         if (!request.approval_date) {
@@ -1056,7 +1118,7 @@ router.post(
           }]
         });
       }
-      
+
       const requestData = request.toJSON ? request.toJSON() : request;
       const requestorData = requestData?.RequestedByUser ? {
         ...requestData.RequestedByUser,
@@ -1078,7 +1140,7 @@ router.post(
 
         if (currentStep) {
           console.log(`✅ Found current step: ${currentStep.step_name} (order: ${currentStep.step_order})`);
-          
+
           // Check if there's a next step
           const nextStepResult = await processWorkflowOnApproval('vehicle_request', {
             department_id: request.department_id
@@ -1094,9 +1156,9 @@ router.post(
               newStatus = currentStep.status_on_approval;
             }
             nextApprover = nextStepResult.approver;
-            
+
             console.log(`➡️ Next step: ${nextStepResult.step.step_name} (order: ${nextStepResult.step.step_order}), Next approver: ${nextApprover.email}`);
-            
+
             // Send notification to next approver if available
             if (nextApprover && requestorData) {
               try {
@@ -1177,16 +1239,16 @@ router.post(
 
       // Update request status
       request.status = newStatus;
-      
+
       // approval_date is already set from Section 4, so we don't override it
       if (!request.approval_date && isODHCApprover) {
         request.approval_date = new Date();
       }
-      
+
       // Don't overwrite request.comments with current approver's remarks
       // Keep request.comments as is (it may contain other information)
       // The email will use the current approver's comments from VehicleApproval
-      
+
       await request.save();
 
       // Send email notification to requestor
@@ -1214,7 +1276,7 @@ router.post(
         // Don't fail the request if email fails
       }
 
-      const successMessage = newStatus === "completed" 
+      const successMessage = newStatus === "completed"
         ? "Service vehicle request approved and completed successfully"
         : `Service vehicle request approved. Status updated to ${newStatus}. ${nextApprover ? `Next approver: ${nextApprover.first_name} ${nextApprover.last_name}` : ''}`;
 
@@ -1277,13 +1339,13 @@ router.post(
       // Allow decline for: submitted, returned, and any intermediate workflow statuses
       const workflow = await getActiveWorkflow('vehicle_request');
       let allowedDeclineStatuses = ["submitted", "returned"];
-      
+
       if (workflow && workflow.Steps && workflow.Steps.length > 0) {
         // Include all status_on_approval values (intermediate statuses) for decline
         const statusOnApprovalValues = workflow.Steps.map(step => step.status_on_approval).filter(Boolean);
         allowedDeclineStatuses = ["submitted", "returned", ...statusOnApprovalValues];
       }
-      
+
       if (!allowedDeclineStatuses.includes(request.status)) {
         return res.status(400).json({
           success: false,
@@ -1407,13 +1469,13 @@ router.post(
       // This allows approvers at any step to return the request for revision
       const workflow = await getActiveWorkflow('vehicle_request');
       let allowedReturnStatuses = ["submitted", "returned"];
-      
+
       if (workflow && workflow.Steps && workflow.Steps.length > 0) {
         // Include all status_on_approval values (intermediate statuses) for return
         const statusOnApprovalValues = workflow.Steps.map(step => step.status_on_approval).filter(Boolean);
         allowedReturnStatuses = ["submitted", "returned", ...statusOnApprovalValues];
       }
-      
+
       if (!allowedReturnStatuses.includes(request.status)) {
         return res.status(400).json({
           success: false,
@@ -1548,17 +1610,17 @@ router.post(
             message: "Vehicle not found",
           });
         }
-        vehicleId = parseInt(assigned_vehicle);  
+        vehicleId = parseInt(assigned_vehicle);
       }
 
       request.assigned_driver = assigned_driver;
       request.assigned_vehicle = vehicleId;
-      
+
       // Update approval_date if provided
       if (req.body.approval_date) {
         request.approval_date = req.body.approval_date;
       }
-      
+
       await request.save();
 
       res.json({
@@ -1623,7 +1685,7 @@ router.delete("/:id", authenticateToken, async (req, res) => {
 router.get("/stats/overview", authenticateToken, async (req, res) => {
   try {
     let whereClause = {};
-    
+
     // Role-based filtering
     if (req.user.role === "requestor") {
       whereClause.requested_by = req.user.id;
@@ -1637,10 +1699,22 @@ router.get("/stats/overview", authenticateToken, async (req, res) => {
           is_active: true,
         },
       });
-      
+
       if (odhcDepartment && req.user.department_id === odhcDepartment.id) {
         // ODHC department approver can see all vehicle requests
-        // No where clause restriction
+        // But should only see 'submitted' requests from their own department
+        // Other departments' 'submitted' requests are pending THEIR department approval
+        whereClause = {
+          [Op.or]: [
+            // Can see requests that have passed department approval (or finalized) from ANY department
+            { status: ['department_approved', 'completed', 'returned', 'declined'] },
+            // Can see 'submitted' requests ONLY from their own ODHC department
+            {
+              status: 'submitted',
+              department_id: req.user.department_id
+            }
+          ]
+        };
       } else {
         // Other department approvers can see requests from their department
         whereClause.department_id = req.user.department_id;
@@ -1657,17 +1731,45 @@ router.get("/stats/overview", authenticateToken, async (req, res) => {
       raw: true
     });
 
+    const verificationStatsData = await ServiceVehicleRequest.findAll({
+      where: {
+        [Op.and]: [
+          whereClause,
+          { verification_status: { [Op.in]: ['pending', 'verified', 'declined'] } }
+        ]
+      },
+      attributes: [
+        "verification_status",
+        [sequelize.fn("COUNT", sequelize.literal('"ServiceVehicleRequest"."request_id"')), "count"]
+      ],
+      group: ["verification_status"],
+      raw: true
+    });
+
     const statusCounts = {
       draft: 0,
       submitted: 0,
+      department_approved: 0,
       returned: 0,
       declined: 0,
       completed: 0
     };
 
+    const verificationCounts = {
+      pending: 0,
+      verified: 0,
+      declined: 0
+    };
+
     stats.forEach(stat => {
       if (statusCounts.hasOwnProperty(stat.status)) {
         statusCounts[stat.status] = parseInt(stat.count);
+      }
+    });
+
+    verificationStatsData.forEach(stat => {
+      if (stat.verification_status && verificationCounts.hasOwnProperty(stat.verification_status)) {
+        verificationCounts[stat.verification_status] = parseInt(stat.count);
       }
     });
 
@@ -1683,6 +1785,7 @@ router.get("/stats/overview", authenticateToken, async (req, res) => {
 
     res.json({
       stats: statusCounts,
+      verificationStats: verificationCounts,
       total: total
     });
   } catch (error) {
@@ -1740,15 +1843,15 @@ router.get('/public/track/:referenceCode', async (req, res) => {
 
     // Build timeline based on workflow steps
     const timeline = [];
-    
+
     // Get active workflow for vehicle requests
     const workflow = await getActiveWorkflow('vehicle_request');
-    
+
     // 1. Request submitted - Always completed
     // Use created_at (when request was created) as submission date
     const requestDataForTimeline = request.toJSON ? request.toJSON() : request;
     const createdAtForTimeline = requestDataForTimeline.created_at || request.created_at || request.createdAt || requestDataForTimeline.createdAt;
-    
+
     timeline.push({
       stage: 'submitted',
       status: 'Request Submitted',
@@ -1772,13 +1875,13 @@ router.get('/public/track/:referenceCode', async (req, res) => {
     vehicleApprovals.forEach(approval => {
       approvalsByStepOrder[approval.step_order] = approval;
     });
-    
+
     if (workflow && workflow.Steps && workflow.Steps.length > 0) {
       const sortedSteps = [...workflow.Steps].sort((a, b) => a.step_order - b.step_order);
-      
+
       // Find the current step index based on request status
       const currentStepIndex = sortedSteps.findIndex(s => s.status_on_approval === request.status);
-      
+
       // Track when each step was completed by checking status progression
       // Use VehicleApproval records to get individual approval dates
       for (let i = 0; i < sortedSteps.length; i++) {
@@ -1787,7 +1890,7 @@ router.get('/public/track/:referenceCode', async (req, res) => {
         const isCurrentStep = request.status === stepStatus;
         const isPastStep = currentStepIndex >= 0 && i < currentStepIndex;
         const isFutureStep = currentStepIndex >= 0 && i > currentStepIndex;
-        
+
         let stageName = step.step_name;
         let description = '';
         let isPending = false;
@@ -1795,19 +1898,19 @@ router.get('/public/track/:referenceCode', async (req, res) => {
         let isDeclined = false;
         let approverInfo = null;
         let approvalTimestamp = null;
-        
+
         // Get approval record for this step if it exists
         const approvalRecord = approvalsByStepOrder[step.step_order];
-        
+
         // Determine step status and calculate appropriate timestamp
         const isLastStep = i === sortedSteps.length - 1;
-        
+
         // Extract dates from request object (handle Sequelize field name variations)
         const requestDataForTimestamp = request.toJSON ? request.toJSON() : request;
         const updatedAt = requestDataForTimestamp.updated_at || request.updated_at || request.updatedAt || requestDataForTimestamp.updatedAt;
         const approvalDate = requestDataForTimestamp.approval_date || request.approval_date || request.approvalDate || requestDataForTimestamp.approvalDate;
         const createdAt = requestDataForTimestamp.created_at || request.created_at || request.createdAt || requestDataForTimestamp.createdAt;
-        
+
         // FIRST: Check if this step has an approval record - if it does, it's completed (regardless of status matching)
         if (approvalRecord && (approvalRecord.status === 'approved' || approvalRecord.approved_at)) {
           isCompleted = true;
@@ -1932,14 +2035,14 @@ router.get('/public/track/:referenceCode', async (req, res) => {
             continue;
           }
         }
-        
+
         // Fallback: Get approver information from workflow step configuration if not in approval record
         if (isCompleted && !approverInfo && step) {
           // Use findApproverForStep to get the actual approver user
           const approver = await findApproverForStep(step, {
             department_id: request.department_id
           });
-          
+
           if (approver) {
             approverInfo = {
               name: `${approver.first_name} ${approver.last_name}`,
@@ -1966,11 +2069,11 @@ router.get('/public/track/:referenceCode', async (req, res) => {
             }
           }
         }
-        
+
         // Ensure timestamp is always set for completed steps
         // Use approval record's approved_at for individual step dates, fallback to updated_at/created_at if no record exists
         const finalTimestamp = approvalTimestamp || updatedAt || createdAt;
-        
+
         timeline.push({
           stage: `step_${step.step_order}`,
           status: stageName,
@@ -1992,13 +2095,13 @@ router.get('/public/track/:referenceCode', async (req, res) => {
         'declined': { name: 'Declined', description: 'Request has been declined' },
         'returned': { name: 'Returned', description: 'Request returned for revision' }
       };
-      
+
       if (request.status !== 'submitted' && request.status !== 'draft') {
         const statusInfo = statusMap[request.status] || { name: request.status, description: `Status: ${request.status}` };
         const requestDataForFallback = request.toJSON ? request.toJSON() : request;
         const updatedAtFallback = requestDataForFallback.updated_at || request.updated_at || request.updatedAt || requestDataForFallback.updatedAt;
         const approvalDateFallback = requestDataForFallback.approval_date || request.approval_date || request.approvalDate || requestDataForFallback.approvalDate;
-        
+
         timeline.push({
           stage: request.status,
           status: statusInfo.name,
@@ -2014,23 +2117,23 @@ router.get('/public/track/:referenceCode', async (req, res) => {
     }
 
     // Format request type
-    const requestType = request.request_type 
+    const requestType = request.request_type
       ? request.request_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
       : 'N/A';
 
     // Return public-safe data
     // Ensure created_at is included (use toJSON to get all fields)
     const requestData = request.toJSON ? request.toJSON() : request;
-    
+
     // Get created_at from various possible field names
     const createdAt = requestData.created_at || request.created_at || request.createdAt || requestData.createdAt;
-    
+
     res.json({
       ticketCode: request.reference_code,
       requestType: 'vehicle',
       status: request.status,
       submittedDate: createdAt,
-      submittedBy: request.RequestedByUser 
+      submittedBy: request.RequestedByUser
         ? `${request.RequestedByUser.first_name} ${request.RequestedByUser.last_name}`
         : request.requestor_name || 'Unknown',
       department: request.Department?.name,
@@ -2057,6 +2160,100 @@ router.get('/public/track/:referenceCode', async (req, res) => {
       error: 'Failed to track request',
       message: error.message
     });
+  }
+});
+
+// Assign temporary verifier (ODHC Only)
+router.post("/:id/assign-verifier", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { verifier_id } = req.body;
+
+    // Check if user is ODHC Department Approver
+    // This logic logic is simplified for now, assuming robust frontend checks too
+    if (req.user.role !== 'department_approver' && req.user.role !== 'super_administrator') {
+      // Also check if department is ODHC?
+      // For now, allow Department Approvers. (Or restrict to ODHC Dept only)
+      // Assuming ODHC logic from GET / is correct:
+      const odhcDept = await Department.findOne({ where: { name: { [Op.iLike]: '%ODHC%' } } });
+      if (!odhcDept || (req.user.department_id !== odhcDept.id && req.user.role !== 'super_administrator')) {
+        return res.status(403).json({ success: false, message: "Only ODHC Department Approvers can assign verifiers." });
+      }
+    }
+
+    const request = await ServiceVehicleRequest.findByPk(id);
+    if (!request) return res.status(404).json({ success: false, message: "Request not found" });
+
+    const verifier = await User.findByPk(verifier_id);
+    if (!verifier) return res.status(404).json({ success: false, message: "Verifier user not found" });
+
+    // Update Request
+    await request.update({
+      verifier_id,
+      verification_status: 'pending',
+      verified_at: null, // Reset if reassigned
+      verifier_comments: null
+    });
+
+    // Notify Verifier
+    // Fetch requestor to pass name
+    const requestor = await User.findByPk(request.requested_by);
+    await emailService.notifyVerifierAssignment(request, requestor, verifier);
+
+    res.json({ success: true, message: "Verifier assigned successfully" });
+
+  } catch (error) {
+    console.error("Error assigning verifier:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Verify Request (Verifier Action)
+router.post("/:id/verify", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, comments } = req.body; // status: 'verified' | 'declined'
+
+    if (!['verified', 'declined'].includes(status)) {
+      return res.status(400).json({ success: false, message: "Invalid status" });
+    }
+
+    const request = await ServiceVehicleRequest.findByPk(id);
+    if (!request) return res.status(404).json({ success: false, message: "Request not found" });
+
+    // Permission Check
+    if (request.verifier_id !== req.user.id) {
+      return res.status(403).json({ success: false, message: "You are not the assigned verifier for this request." });
+    }
+    if (request.verification_status !== 'pending') {
+      return res.status(400).json({ success: false, message: "This request is not pending verification." });
+    }
+
+    // Update Request
+    await request.update({
+      verification_status: status,
+      verified_at: new Date(),
+      verifier_comments: comments
+    });
+
+    // Notify ODHC
+    // Fetch ODHC Approvers
+    const odhcDept = await Department.findOne({ where: { name: { [Op.iLike]: '%ODHC%' } } });
+    if (odhcDept) {
+      const odhcApprovers = await User.findAll({
+        where: { department_id: odhcDept.id, role: 'department_approver' }
+      });
+      const emails = odhcApprovers.map(u => u.email).filter(e => e);
+
+      const verifier = await User.findByPk(req.user.id);
+      await emailService.notifyVerificationOutcome(request, verifier, status, comments, emails);
+    }
+
+    res.json({ success: true, message: `Request ${status} successfully` });
+
+  } catch (error) {
+    console.error("Error verifing request:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

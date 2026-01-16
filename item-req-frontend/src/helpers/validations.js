@@ -2,38 +2,38 @@
 export const VALIDATION_PATTERNS = {
   // Email validation
   EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-  
+
   // Phone number (10 digits, optional formatting)
   PHONE: /^(\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}$/,
-  
+
   // URL validation
   URL: /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/,
-  
+
   // Alphanumeric only
   ALPHANUMERIC: /^[a-zA-Z0-9]+$/,
-  
+
   // Alphanumeric with spaces
   ALPHANUMERIC_SPACE: /^[a-zA-Z0-9\s]+$/,
-  
+
   // Username (letters, numbers, underscore, hyphen)
   USERNAME: /^[a-zA-Z0-9_-]{3,20}$/,
-  
+
   // Strong password (min 8 chars, uppercase, lowercase, number, special char)
   PASSWORD_STRONG: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/,
-  
+
   // Numeric only
   NUMERIC: /^\d+$/,
-  
+
   // Positive integer
   POSITIVE_INT: /^[1-9]\d*$/,
-  
+
   // Date (MM/DD/YYYY)
   DATE_MMDDYYYY: /^(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])\/\d{4}$/,
-  
+
   // ISO Date (YYYY-MM-DD)
   DATE_ISO: /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/,
-  
- 
+
+
   // Whitespace only
   WHITESPACE: /^\s+$/,
 };
@@ -132,6 +132,12 @@ export const validateServiceVehicleForm = (formData) => {
   if (requestType === "car_only") {
     if (!formData.destination_car?.trim()) {
       errors.destination_car = "Destination/Car use is required";
+    }
+
+    if (!formData.has_valid_license) {
+      errors.has_valid_license = "Please confirm if you have a valid license";
+    } else if (formData.has_valid_license === "false") {
+      errors.has_valid_license = "A valid driver's license is required for Car Only requests";
     }
   }
 

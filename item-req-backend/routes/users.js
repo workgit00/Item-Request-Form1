@@ -9,12 +9,12 @@ import exportService from '../utils/exportService.js';
 const router = express.Router();
 
 // Get all users (admin and IT manager only)
-router.get('/', authenticateToken, requireRole('super_administrator', 'it_manager'), async (req, res) => {
+router.get('/', authenticateToken, requireRole('super_administrator', 'it_manager', 'department_approver'), async (req, res) => {
   try {
     const { search, department, role, status, page = 1, limit = 50 } = req.query;
-    
+
     const whereClause = {};
-    
+
     if (search) {
       whereClause[Op.or] = [
         { username: { [Op.iLike]: `%${search}%` } },
@@ -23,15 +23,15 @@ router.get('/', authenticateToken, requireRole('super_administrator', 'it_manage
         { last_name: { [Op.iLike]: `%${search}%` } }
       ];
     }
-    
+
     if (department) {
       whereClause.department_id = department;
     }
-    
+
     if (role) {
       whereClause.role = role;
     }
-    
+
     if (status) {
       whereClause.is_active = status === 'active';
     }
@@ -142,7 +142,7 @@ router.patch('/:id/role', authenticateToken, requireRole('super_administrator'),
     const { role } = req.body;
 
     const validRoles = ['requestor', 'department_approver', 'it_manager', 'service_desk', 'super_administrator'];
-    
+
     if (!validRoles.includes(role)) {
       return res.status(400).json({
         error: 'Invalid role',
@@ -151,7 +151,7 @@ router.patch('/:id/role', authenticateToken, requireRole('super_administrator'),
     }
 
     const user = await User.findByPk(id);
-    
+
     if (!user) {
       return res.status(404).json({
         error: 'User not found',
@@ -203,10 +203,10 @@ router.patch('/:id/department', authenticateToken, requireRole('super_administra
     const { departmentId, departmentName } = req.body;
 
     // Validate input
-    console.log(`📝 Updating department for user ${id}:`, { 
-      departmentName, 
+    console.log(`📝 Updating department for user ${id}:`, {
+      departmentName,
       departmentNameType: typeof departmentName,
-      body: req.body 
+      body: req.body
     });
 
     if (!departmentName || typeof departmentName !== 'string' || departmentName.trim() === '') {
@@ -233,20 +233,20 @@ router.patch('/:id/department', authenticateToken, requireRole('super_administra
 
     // Check if user has AD DN - if not, try to find them in AD
     console.log(`👤 User ${user.username} (ID: ${user.id}) - AD DN:`, user.ad_dn ? 'Present' : 'Missing');
-    
+
     if (!user.ad_dn) {
       console.log(`🔍 User ${user.username} missing ad_dn, attempting to find in AD...`);
-      
+
       try {
         // Try to find user in AD by username
         let adUserDN = await ldapService.findUserDN(user.username);
-        
+
         // If not found by username, try by email
         if (!adUserDN && user.email) {
           console.log(`   Not found by username, trying email: ${user.email}`);
           adUserDN = await ldapService.findUserDNByEmail(user.email);
         }
-        
+
         if (adUserDN) {
           console.log(`✅ Found user in AD with DN: ${adUserDN}`);
           // Update user's ad_dn in database
@@ -273,42 +273,42 @@ router.patch('/:id/department', authenticateToken, requireRole('super_administra
 
     // Step 1: Update in Active Directory first
     const enableAdSync = process.env.ENABLE_AD_DEPARTMENT_SYNC !== 'false';
-    
+
     if (enableAdSync) {
       try {
         // Extract OU from DN for logging
         const ouMatch = user.ad_dn.match(/OU=([^,]+)/i);
         const ouName = ouMatch ? ouMatch[1] : 'Unknown OU';
-        
+
         console.log(`🔄 Updating department attribute in AD for user ${user.username}`);
         console.log(`   User DN: ${user.ad_dn}`);
         console.log(`   User OU: ${ouName}`);
         console.log(`   New department: ${departmentName.trim()}`);
-        
+
         await ldapService.updateUserAttribute(
           user.ad_dn,
           'department',
           departmentName.trim()
         );
-        
+
         adSyncSuccess = true;
         console.log(`✅ Successfully updated department in AD for user ${user.username} in OU: ${ouName}`);
       } catch (adError) {
         // Extract OU from DN for error reporting
         const ouMatch = user.ad_dn.match(/OU=([^,]+)/i);
         const ouName = ouMatch ? ouMatch[1] : 'Unknown OU';
-        
+
         console.error(`❌ Failed to update department in AD for user ${user.username}`);
         console.error(`   User DN: ${user.ad_dn}`);
         console.error(`   User OU: ${ouName}`);
         console.error(`   Error: ${adError.message}`);
-        
+
         adSyncError = adError.message;
-        
+
         // If permission error, return error and don't update database
-        if (adError.message.includes('Permission denied') || 
-            adError.message.includes('INSUFF_ACCESS_RIGHTS') ||
-            adError.message.includes('insufficient access')) {
+        if (adError.message.includes('Permission denied') ||
+          adError.message.includes('INSUFF_ACCESS_RIGHTS') ||
+          adError.message.includes('insufficient access')) {
           return res.status(403).json({
             error: 'AD sync failed - Permission denied',
             message: adError.message,
@@ -317,7 +317,7 @@ router.patch('/:id/department', authenticateToken, requireRole('super_administra
             userDN: user.ad_dn
           });
         }
-        
+
         // For other AD errors, still return error but provide more context
         return res.status(500).json({
           error: 'AD sync failed',
@@ -330,11 +330,11 @@ router.patch('/:id/department', authenticateToken, requireRole('super_administra
 
     // Step 2: Find or create department in database
     let dbDepartment = null;
-    
+
     if (departmentId) {
       // Use provided department ID
       dbDepartment = await Department.findByPk(departmentId);
-      
+
       if (!dbDepartment) {
         return res.status(404).json({
           error: 'Department not found',
@@ -352,9 +352,9 @@ router.patch('/:id/department', authenticateToken, requireRole('super_administra
           ad_dn: null // No OU DN when using attributes
         }
       });
-      
+
       dbDepartment = department;
-      
+
       if (created) {
         console.log(`✅ Created new department in database: ${departmentName}`);
       }
@@ -423,7 +423,7 @@ router.patch('/:id/status', authenticateToken, requireRole('super_administrator'
     }
 
     const user = await User.findByPk(id);
-    
+
     if (!user) {
       return res.status(404).json({
         error: 'User not found',
@@ -472,7 +472,7 @@ router.patch('/:id/status', authenticateToken, requireRole('super_administrator'
 router.post('/sync', authenticateToken, requireRole('super_administrator'), async (req, res) => {
   try {
     const result = await userSyncService.syncAllUsers();
-    
+
     if (result.success) {
       res.json({
         message: 'User synchronization completed successfully',
@@ -499,9 +499,9 @@ router.post('/sync', authenticateToken, requireRole('super_administrator'), asyn
 router.post('/:username/sync', authenticateToken, requireRole('super_administrator', 'it_manager'), async (req, res) => {
   try {
     const { username } = req.params;
-    
+
     const result = await userSyncService.syncSingleUser(username);
-    
+
     res.json({
       message: `User ${username} synchronized successfully`,
       user: {
@@ -513,14 +513,14 @@ router.post('/:username/sync', authenticateToken, requireRole('super_administrat
     });
   } catch (error) {
     console.error('Error syncing single user:', error);
-    
+
     if (error.message.includes('not found')) {
       return res.status(404).json({
         error: 'User not found',
         message: `User ${req.params.username} not found in Active Directory`
       });
     }
-    
+
     res.status(500).json({
       error: 'Failed to sync user',
       message: error.message
@@ -546,7 +546,7 @@ router.get('/sync/status', authenticateToken, requireRole('super_administrator',
 router.get('/department/:departmentId', authenticateToken, async (req, res) => {
   try {
     const { departmentId } = req.params;
-    
+
     // Check if user can access this department
     if (req.user.role === 'department_approver' && req.user.department_id !== departmentId) {
       return res.status(403).json({
@@ -556,7 +556,7 @@ router.get('/department/:departmentId', authenticateToken, async (req, res) => {
     }
 
     const users = await User.findAll({
-      where: { 
+      where: {
         department_id: departmentId,
         is_active: true
       },
@@ -593,7 +593,7 @@ router.get('/department/:departmentId', authenticateToken, async (req, res) => {
 router.get('/export/excel', authenticateToken, requireRole('super_administrator', 'it_manager'), async (req, res) => {
   try {
     const { search, department, role, status } = req.query;
-    
+
     const filters = {};
     if (search) filters.search = search;
     if (department) filters.department = department;
@@ -612,10 +612,10 @@ router.get('/export/excel', authenticateToken, requireRole('super_administrator'
     }
 
     const excelBuffer = await exportService.exportUsers(filters);
-    
+
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename=users_export_${new Date().toISOString().split('T')[0]}.xlsx`);
-    
+
     res.send(excelBuffer);
   } catch (error) {
     console.error('Error exporting users:', error);

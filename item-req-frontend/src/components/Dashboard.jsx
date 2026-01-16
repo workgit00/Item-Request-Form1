@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import STC_LOGO from "../assets/STC_LOGO.png";
 
- import { 
-  Plus, 
-  FileText, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
+import {
+  Plus,
+  FileText,
+  Clock,
+  CheckCircle,
+  XCircle,
   AlertCircle,
   Users,
   Building,
@@ -23,7 +23,9 @@ import STC_LOGO from "../assets/STC_LOGO.png";
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Bell
+  Bell,
+  Calendar,
+  UserCheck
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { requestsAPI, REQUEST_STATUSES, serviceVehicleRequestsAPI } from '../services/api';
@@ -51,6 +53,16 @@ const Dashboard = () => {
     currentPage: 1
   });
 
+  const isSundayInRange = (start, end) => {
+    if (!start || !end) return false;
+    const d1 = new Date(start);
+    const d2 = new Date(end);
+    for (let d = new Date(d1); d <= d2; d.setDate(d.getDate() + 1)) {
+      if (d.getDay() === 0) return true;
+    }
+    return false;
+  };
+
   useEffect(() => {
     loadDashboardData();
   }, [filters, activeTab]);
@@ -58,11 +70,11 @@ const Dashboard = () => {
   // Helper function to check if item request is pending current user's approval
   const isPendingMyApproval = (request) => {
     if (!request.approvals || !user) return false;
-    
+
     // Check if there's a pending approval where the current user is the approver
-    return request.approvals.some(approval => 
-      approval.status === 'pending' && 
-      approval.approver && 
+    return request.approvals.some(approval =>
+      approval.status === 'pending' &&
+      approval.approver &&
       approval.approver.id === user.id
     );
   };
@@ -71,33 +83,33 @@ const Dashboard = () => {
   // For vehicle requests, we check based on approvals array and server-side flag
   const isPendingMyVehicleApproval = (request) => {
     if (!request || !user) return false;
-    
+
     // Use server-side flag if available (most accurate)
     if (request.isPendingMyApproval !== undefined) {
       return request.isPendingMyApproval;
     }
-    
+
     // Fallback: Check if there's a pending approval where the current user is the approver
     if (request.approvals && Array.isArray(request.approvals)) {
-      return request.approvals.some(approval => 
-        approval.status === 'pending' && 
-        approval.approver && 
+      return request.approvals.some(approval =>
+        approval.status === 'pending' &&
+        approval.approver &&
         approval.approver.id === user.id
       );
     }
-    
+
     // Fallback: Check based on status and user role if approvals array is not available
     // Skip if request is completed, declined, or draft
     if (['completed', 'declined', 'draft'].includes(request.status)) {
       return false;
     }
-    
+
     // Department approver can approve submitted or returned vehicle requests
-    if ((user.role === 'department_approver' || user.role === 'super_administrator') && 
-        (request.status === 'submitted' || request.status === 'returned')) {
+    if ((user.role === 'department_approver' || user.role === 'super_administrator') &&
+      (request.status === 'submitted' || request.status === 'returned')) {
       return true;
     }
-    
+
     return false;
   };
 
@@ -105,34 +117,34 @@ const Dashboard = () => {
     try {
       setLoading(true);
       if (activeTab === 'item') {
-      // Build query parameters with pagination and sorting
-      const queryParams = {
-        ...filters,
-        limit: filters.limit || 5,
-        page: filters.page || 1,
-        sortBy: filters.sortBy || 'date',
-        sortOrder: filters.sortOrder || 'desc'
-      };
-      
-      const [requestsResponse, statsResponse] = await Promise.all([
-        requestsAPI.getAll(queryParams),
-        requestsAPI.getStats()
-      ]);
-      
-      setRequests(requestsResponse.data.requests || []);
-      
-      // Update pagination info
-      if (requestsResponse.data.pagination) {
-        setPagination({
-          total: requestsResponse.data.pagination.total || 0,
-          pages: requestsResponse.data.pagination.pages || 0,
-          currentPage: requestsResponse.data.pagination.page || 1
+        // Build query parameters with pagination and sorting
+        const queryParams = {
+          ...filters,
+          limit: filters.limit || 5,
+          page: filters.page || 1,
+          sortBy: filters.sortBy || 'date',
+          sortOrder: filters.sortOrder || 'desc'
+        };
+
+        const [requestsResponse, statsResponse] = await Promise.all([
+          requestsAPI.getAll(queryParams),
+          requestsAPI.getStats()
+        ]);
+
+        setRequests(requestsResponse.data.requests || []);
+
+        // Update pagination info
+        if (requestsResponse.data.pagination) {
+          setPagination({
+            total: requestsResponse.data.pagination.total || 0,
+            pages: requestsResponse.data.pagination.pages || 0,
+            currentPage: requestsResponse.data.pagination.page || 1
+          });
+        }
+        setStats({
+          ...statsResponse.data.stats,
+          total: statsResponse.data.total
         });
-      }
-      setStats({
-        ...statsResponse.data.stats,
-        total: statsResponse.data.total
-      });
       } else {
         // Load vehicle requests and stats
         // Build query parameters with pagination and sorting
@@ -143,15 +155,15 @@ const Dashboard = () => {
           sortBy: filters.sortBy || 'date',
           sortOrder: filters.sortOrder || 'desc'
         };
-        
+
         const [vehicleRequestsResponse, vehicleStatsResponse] = await Promise.all([
           serviceVehicleRequestsAPI.getAll(queryParams),
           serviceVehicleRequestsAPI.getStats()
         ]);
-        
+
         const vehicleData = vehicleRequestsResponse.data?.requests || vehicleRequestsResponse.data || [];
         setVehicleRequests(Array.isArray(vehicleData) ? vehicleData : []);
-        
+
         // Update pagination info for vehicle requests
         if (vehicleRequestsResponse.data?.pagination) {
           setPagination({
@@ -162,6 +174,7 @@ const Dashboard = () => {
         }
         setVehicleStats({
           ...vehicleStatsResponse.data.stats,
+          verificationStats: vehicleStatsResponse.data.verificationStats || {},
           total: vehicleStatsResponse.data.total
         });
       }
@@ -174,10 +187,10 @@ const Dashboard = () => {
 
   const getStatusBadge = (status) => {
     let label, color;
-    
+
     if (activeTab === 'item') {
-    const statusConfig = REQUEST_STATUSES.find(s => s.value === status);
-    if (!statusConfig) return null;
+      const statusConfig = REQUEST_STATUSES.find(s => s.value === status);
+      if (!statusConfig) return null;
       label = statusConfig.label;
       color = statusConfig.color;
     } else {
@@ -235,14 +248,15 @@ const Dashboard = () => {
         );
       } else {
         // Vehicle request stats
-      cards.push(
+        cards.push(
           { title: 'My Drafts', count: currentStats.draft || 0, icon: FileText, color: 'gray' },
           { title: 'Returned', count: currentStats.returned || 0, icon: RotateCcw, color: 'orange' },
           { title: 'Pending Approval', count: currentStats.submitted || 0, icon: Clock, color: 'yellow' },
+          { title: 'Department Approved', count: currentStats.department_approved || 0, icon: CheckCircle, color: 'green' },
           { title: 'Declined', count: currentStats.declined || 0, icon: XCircle, color: 'red' },
           { title: 'Completed', count: currentStats.completed || 0, icon: CheckCircle, color: 'blue' },
           { title: 'Total Requests', count: currentStats.total || 0, icon: Car, color: 'gray' }
-      );
+        );
       }
     } else if (user.role === 'department_approver') {
       if (activeTab === 'item') {
@@ -256,13 +270,26 @@ const Dashboard = () => {
         );
       } else {
         // Vehicle request stats for department approver
-      cards.push(
-          { title: 'Pending My Approval', count: currentStats.submitted || 0, icon: AlertCircle, color: 'orange' },
+        const isODHC = user.department?.name?.toUpperCase()?.includes('ODHC');
+        const verificationStats = currentStats.verificationStats || {};
+
+        const deptCards = [
+          { title: 'Pending My Approval', count: isODHC ? ((currentStats.submitted || 0) + (currentStats.department_approved || 0)) : (currentStats.submitted || 0), icon: AlertCircle, color: 'orange' },
+          { title: isODHC ? 'Department Approved' : 'Approved by Me', count: currentStats.department_approved || 0, icon: CheckCircle, color: 'green' },
           { title: 'Returned', count: currentStats.returned || 0, icon: RotateCcw, color: 'orange' },
           { title: 'Declined', count: currentStats.declined || 0, icon: XCircle, color: 'red' },
           { title: 'Completed', count: currentStats.completed || 0, icon: CheckCircle, color: 'blue' },
           { title: 'Total Requests', count: currentStats.total || 0, icon: Car, color: 'gray' }
-      );
+        ];
+
+        if (isODHC) {
+          deptCards.unshift(
+            { title: 'Pending Verification', count: verificationStats.pending || 0, icon: UserCheck, color: 'purple' },
+            { title: 'Verif. Declined', count: verificationStats.declined || 0, icon: XCircle, color: 'red' }
+          );
+        }
+
+        cards.push(...deptCards);
       }
     } else if (user.role === 'it_manager') {
       if (activeTab === 'item') {
@@ -276,18 +303,18 @@ const Dashboard = () => {
         );
       } else {
         // Vehicle requests don't go through IT manager
-      cards.push(
+        cards.push(
           { title: 'Total Vehicle Requests', count: currentStats.total || 0, icon: Car, color: 'blue' }
-      );
+        );
       }
     } else if (user.role === 'service_desk') {
       if (activeTab === 'item') {
-      cards.push(
+        cards.push(
           { title: 'To Process', count: currentStats.it_manager_approved || 0, icon: AlertCircle, color: 'orange' },
           { title: 'Processing', count: currentStats.service_desk_processing || 0, icon: Clock, color: 'yellow' },
           { title: 'Completed', count: currentStats.completed || 0, icon: CheckCircle, color: 'green' },
           { title: 'Total Requests', count: currentStats.total || 0, icon: FileText, color: 'blue' }
-      );
+        );
       } else {
         // Vehicle requests don't go through service desk
         cards.push(
@@ -322,47 +349,47 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-        <header className="bg-white shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <img src={STC_LOGO} alt="STC Logo" className="h-8 w-8" />
-              <div>
-            <div className="font-semibold text-gray-900">General Services Request System</div>
-            <div className="text-xs text-gray-500">Styrotech Corporation</div>
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <img src={STC_LOGO} alt="STC Logo" className="h-8 w-8" />
+                <div>
+                  <div className="font-semibold text-gray-900">General Services Request System</div>
+                  <div className="text-xs text-gray-500">Styrotech Corporation</div>
+                </div>
               </div>
             </div>
-          </div>
-          
-          <div className="flex items-center space-x-4">
-            <div className="text-right">
-              <div className="text-sm font-medium text-gray-900">{user.fullName}</div>
-              <div className="text-xs text-gray-500">{user.role.replace('_', ' ').toUpperCase()}</div>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              {canManageUsers() && (
-            <button
-              onClick={() => navigate('/users')}
-              className="p-2 text-gray-400 hover:text-gray-600"
-              title="Manage Users"
-            >
-              <Users className="h-5 w-5" />
-            </button>
-              )}
-              
-              {isAdmin() && (
-            <>
-              <button
-                onClick={() => navigate('/departments')}
-                className="p-2 text-gray-400 hover:text-gray-600"
-                title="Manage Departments"
-              >
-                <Building className="h-5 w-5" />
-              </button>
-              <button
-                onClick={(e) => {
+
+            <div className="flex items-center space-x-4">
+              <div className="text-right">
+                <div className="text-sm font-medium text-gray-900">{user.fullName}</div>
+                <div className="text-xs text-gray-500">{user.role.replace('_', ' ').toUpperCase()}</div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                {canManageUsers() && (
+                  <button
+                    onClick={() => navigate('/users')}
+                    className="p-2 text-gray-400 hover:text-gray-600"
+                    title="Manage Users"
+                  >
+                    <Users className="h-5 w-5" />
+                  </button>
+                )}
+
+                {isAdmin() && (
+                  <>
+                    <button
+                      onClick={() => navigate('/departments')}
+                      className="p-2 text-gray-400 hover:text-gray-600"
+                      title="Manage Departments"
+                    >
+                      <Building className="h-5 w-5" />
+                    </button>
+                    <button
+                      onClick={(e) => {
                         e.preventDefault();
                         console.log('Settings button clicked, navigating to /settings/workflows');
                         navigate('/settings/workflows');
@@ -375,7 +402,7 @@ const Dashboard = () => {
                     </button>
                   </>
                 )}
-                
+
                 <button
                   onClick={handleLogout}
                   className="p-2 text-gray-400 hover:text-gray-600"
@@ -405,22 +432,20 @@ const Dashboard = () => {
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab('item')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'item'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'item'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
             >
               <FileText className="h-5 w-5 inline-block mr-2" />
               Item Requests
             </button>
             <button
               onClick={() => setActiveTab('vehicle')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'vehicle'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'vehicle'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
             >
               <Car className="h-5 w-5 inline-block mr-2" />
               Vehicle Requests
@@ -438,7 +463,8 @@ const Dashboard = () => {
               green: 'bg-green-500',
               red: 'bg-red-500',
               yellow: 'bg-yellow-500',
-              orange: 'bg-orange-500'
+              orange: 'bg-orange-500',
+              purple: 'bg-purple-500'
             };
 
             return (
@@ -485,7 +511,7 @@ const Dashboard = () => {
                 className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
-            
+
             <select
               value={filters.status}
               onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value, page: 1 }))}
@@ -494,9 +520,9 @@ const Dashboard = () => {
               <option value="">All Status</option>
               {activeTab === 'item' ? (
                 REQUEST_STATUSES.map(status => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
-                </option>
+                  <option key={status.value} value={status.value}>
+                    {status.label}
+                  </option>
                 ))
               ) : (
                 // Vehicle request statuses
@@ -510,7 +536,7 @@ const Dashboard = () => {
                 </>
               )}
             </select>
-            
+
             {/* Sort By */}
             <select
               value={filters.sortBy}
@@ -521,13 +547,13 @@ const Dashboard = () => {
               <option value="status">Sort by Status</option>
               <option value="requestor">Sort by Requestor</option>
             </select>
-            
+
             {/* Sort Order */}
             <button
-              onClick={() => setFilters(prev => ({ 
-                ...prev, 
+              onClick={() => setFilters(prev => ({
+                ...prev,
                 sortOrder: prev.sortOrder === 'asc' ? 'desc' : 'asc',
-                page: 1 
+                page: 1
               }))}
               className="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 flex items-center space-x-1"
               title={`Sort ${filters.sortOrder === 'asc' ? 'Descending' : 'Ascending'}`}
@@ -549,7 +575,7 @@ const Dashboard = () => {
               Recent {activeTab === 'item' ? 'Item' : 'Vehicle'} Requests
             </h2>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -564,9 +590,9 @@ const Dashboard = () => {
                     Status
                   </th>
                   {activeTab === 'item' ? (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Items
-                  </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Items
+                    </th>
                   ) : (
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Request Type
@@ -583,77 +609,77 @@ const Dashboard = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {activeTab === 'item' ? (
                   requests.length === 0 ? (
-                  <tr>
-                    <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
-                      <FileText className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-                      <p>No requests found</p>
-                      {user.role === 'requestor' && (
-                        <button
+                    <tr>
+                      <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
+                        <FileText className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+                        <p>No requests found</p>
+                        {user.role === 'requestor' && (
+                          <button
                             onClick={() => navigate('/forms')}
-                          className="mt-2 text-blue-600 hover:text-blue-800"
-                        >
-                          Create your first request
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ) : (
-                  requests.map((request) => (
-                    <tr key={request.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
-                            {isPendingMyApproval(request) && (
-                              <span className="relative inline-flex items-center justify-center">
-                                <Bell className="h-5 w-5 text-orange-600 animate-pulse" title="Pending your approval" />
-                                <span className="absolute top-0 right-0 flex h-2 w-2">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
-                                </span>
-                              </span>
-                            )}
-                            {request.requestNumber}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {request.userName}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{request.requestor.fullName}</div>
-                        <div className="text-sm text-gray-500">{request.department.name}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(request.status)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {request.itemsCount} item{request.itemsCount !== 1 ? 's' : ''}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {request.status === 'draft' 
-                          ? 'Not submitted yet'
-                          : request.submittedAt 
-                            ? new Date(request.submittedAt).toLocaleDateString()
-                            : new Date(request.createdAt).toLocaleDateString()
-                        }
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => {
-                            if (request.status === 'draft' && user.id === request.requestor.id) {
-                              navigate(`/requests/${request.id}/edit`);
-                            } else {
-                              navigate(`/requests/${request.id}`);
-                            }
-                          }}
-                          className="text-blue-600 hover:text-blue-900 flex items-center"
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          {request.status === 'draft' && user.id === request.requestor.id ? 'Edit' : 'View'}
-                        </button>
+                            className="mt-2 text-blue-600 hover:text-blue-800"
+                          >
+                            Create your first request
+                          </button>
+                        )}
                       </td>
                     </tr>
-                  ))
+                  ) : (
+                    requests.map((request) => (
+                      <tr key={request.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                              {isPendingMyApproval(request) && (
+                                <span className="relative inline-flex items-center justify-center">
+                                  <Bell className="h-5 w-5 text-orange-600 animate-pulse" title="Pending your approval" />
+                                  <span className="absolute top-0 right-0 flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                                  </span>
+                                </span>
+                              )}
+                              {request.requestNumber}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {request.userName}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{request.requestor.fullName}</div>
+                          <div className="text-sm text-gray-500">{request.department.name}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {getStatusBadge(request.status)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {request.itemsCount} item{request.itemsCount !== 1 ? 's' : ''}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {request.status === 'draft'
+                            ? 'Not submitted yet'
+                            : request.submittedAt
+                              ? new Date(request.submittedAt).toLocaleDateString()
+                              : new Date(request.createdAt).toLocaleDateString()
+                          }
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button
+                            onClick={() => {
+                              if (request.status === 'draft' && user.id === request.requestor.id) {
+                                navigate(`/requests/${request.id}/edit`);
+                              } else {
+                                navigate(`/requests/${request.id}`);
+                              }
+                            }}
+                            className="text-blue-600 hover:text-blue-900 flex items-center"
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            {request.status === 'draft' && user.id === request.requestor.id ? 'Edit' : 'View'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))
                   )
                 ) : (
                   vehicleRequests.length === 0 ? (
@@ -673,14 +699,18 @@ const Dashboard = () => {
                     </tr>
                   ) : (
                     vehicleRequests.map((request) => {
-                      const requestorName = request.RequestedByUser?.fullName || 
-                                           (request.RequestedByUser?.firstName && request.RequestedByUser?.lastName 
-                                             ? `${request.RequestedByUser.firstName} ${request.RequestedByUser.lastName}`
-                                             : request.requestor_name || 'Unknown');
+                      const requestorName = request.RequestedByUser?.fullName ||
+                        (request.RequestedByUser?.firstName && request.RequestedByUser?.lastName
+                          ? `${request.RequestedByUser.firstName} ${request.RequestedByUser.lastName}`
+                          : request.requestor_name || 'Unknown');
                       const departmentName = request.Department?.name || 'No Department';
-                      
+
+                      const hasSunday = isSundayInRange(request.travel_date_from, request.travel_date_to);
+                      const isODHC = user?.department?.name?.toUpperCase()?.includes('ODHC') || user?.role === 'super_administrator';
+                      const isAssignedVerifier = request.verifier_id === user.id && request.verification_status === 'pending';
+
                       return (
-                        <tr key={request.id || request.request_id} className="hover:bg-gray-50">
+                        <tr key={request.id || request.request_id} className={`hover:bg-gray-50 ${isAssignedVerifier ? 'bg-purple-50' : ''}`}>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div>
                               <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
@@ -694,6 +724,16 @@ const Dashboard = () => {
                                   </span>
                                 )}
                                 {request.reference_code || `SVR-${request.id || request.request_id}`}
+
+                                {isAssignedVerifier && (
+                                  <span className="bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded-full ml-2 border border-purple-200">To Verify</span>
+                                )}
+
+                                {hasSunday && isODHC && (
+                                  <span className="text-orange-600 ml-2" title="Travel includes Sunday - Verification Recommended">
+                                    <Calendar className="h-4 w-4" />
+                                  </span>
+                                )}
                               </div>
                               <div className="text-sm text-gray-500">
                                 {request.requestor_name || requestorName}
@@ -706,14 +746,28 @@ const Dashboard = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             {getStatusBadge(request.status)}
+                            {request.verification_status === 'verified' && (
+                              <div className="mt-1">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                                  <UserCheck className="w-3 h-3 mr-1" />Verified
+                                </span>
+                              </div>
+                            )}
+                            {request.verification_status === 'declined' && (
+                              <div className="mt-1">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">
+                                  <XCircle className="w-3 h-3 mr-1" />Verif. Declined
+                                </span>
+                              </div>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {request.request_type ? request.request_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'N/A'}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {request.status === 'draft' 
+                            {request.status === 'draft'
                               ? 'Not submitted yet'
-                              : request.submitted_at 
+                              : request.submitted_at
                                 ? new Date(request.submitted_at).toLocaleDateString()
                                 : request.requested_date
                                   ? new Date(request.requested_date).toLocaleDateString()
@@ -745,7 +799,7 @@ const Dashboard = () => {
               </tbody>
             </table>
           </div>
-          
+
           {/* Pagination Controls */}
           {pagination.pages > 1 && (
             <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
@@ -757,7 +811,7 @@ const Dashboard = () => {
                   </span>{' '}
                   of <span className="font-medium">{pagination.total}</span> requests
                 </div>
-                
+
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => setFilters(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
@@ -767,7 +821,7 @@ const Dashboard = () => {
                     <ChevronLeft className="h-4 w-4 mr-1" />
                     Previous
                   </button>
-                  
+
                   <div className="flex items-center space-x-1">
                     {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
                       let pageNum;
@@ -780,23 +834,22 @@ const Dashboard = () => {
                       } else {
                         pageNum = pagination.currentPage - 2 + i;
                       }
-                      
+
                       return (
                         <button
                           key={pageNum}
                           onClick={() => setFilters(prev => ({ ...prev, page: pageNum }))}
-                          className={`px-3 py-2 text-sm font-medium rounded-md ${
-                            pagination.currentPage === pageNum
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                          }`}
+                          className={`px-3 py-2 text-sm font-medium rounded-md ${pagination.currentPage === pageNum
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                            }`}
                         >
                           {pageNum}
                         </button>
                       );
                     })}
                   </div>
-                  
+
                   <button
                     onClick={() => setFilters(prev => ({ ...prev, page: Math.min(pagination.pages, prev.page + 1) }))}
                     disabled={pagination.currentPage === pagination.pages}

@@ -9,7 +9,7 @@ const RequestForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  
+
   const currentPath = window.location.pathname;
   const isEditing = currentPath.includes('/edit');
   const isViewing = !!id && !isEditing;
@@ -51,21 +51,21 @@ const RequestForm = () => {
   const [tempApprovalSignature, setTempApprovalSignature] = useState('');
   const [currentApprovalId, setCurrentApprovalId] = useState(null); // Track which approval the modal is for
 
-  const canEditReturned = requestData?.status === 'returned' && 
-                          requestData?.requestor?.id === user?.id && 
-                          isViewing;
+  const canEditReturned = requestData?.status === 'returned' &&
+    requestData?.requestor?.id === user?.id &&
+    isViewing;
 
   // Helper function to check if signature can be edited
   // Can only edit if request is NOT: approved, declined, returned, or completed
   const canEditSignature = (isRequestor = false, approval = null) => {
     // Statuses that prevent editing for requestors (locked states)
-    const requestorLockedStatuses = ['submitted', 'department_approved', 'it_manager_approved', 
-                                      'service_desk_processing', 'completed', 
-                                      'department_declined', 'it_manager_declined'];
-    
+    const requestorLockedStatuses = ['submitted', 'department_approved', 'it_manager_approved',
+      'service_desk_processing', 'completed',
+      'department_declined', 'it_manager_declined'];
+
     // Statuses that prevent editing for approvers (final states)
     const approverLockedStatuses = ['completed', 'department_declined', 'it_manager_declined', 'returned'];
-    
+
     if (isRequestor) {
       // Requestor can edit if: creating new request, draft status, or returned (and they're the requestor)
       // Cannot edit if: submitted, approved, declined, or completed
@@ -73,9 +73,9 @@ const RequestForm = () => {
       if (isLocked && requestData?.status !== 'returned') {
         return false;
       }
-      return isCreating || 
-             requestData?.status === 'draft' || 
-             (requestData?.status === 'returned' && requestData?.requestor?.id === user?.id);
+      return isCreating ||
+        requestData?.status === 'draft' ||
+        (requestData?.status === 'returned' && requestData?.requestor?.id === user?.id);
     } else if (approval) {
       // Approver can edit if: 
       // 1. Approval status is pending
@@ -85,12 +85,12 @@ const RequestForm = () => {
       const isPendingApproval = approval.status === 'pending';
       const isCurrentApprover = approval.approver?.id === user?.id;
       const isLocked = requestData?.status && approverLockedStatuses.includes(requestData.status);
-      
+
       // Cannot edit if request is in a final locked state
       if (isLocked) {
         return false;
       }
-      
+
       return isPendingApproval && isCurrentApprover;
     }
     return false;
@@ -154,7 +154,7 @@ const RequestForm = () => {
       const response = await requestsAPI.getById(id);
       const request = response.data.request;
       setRequestData(request);
-      
+
       // Debug: Log permissions to check why button might not appear
       console.log('Request status:', request.status);
       console.log('Permissions:', request.permissions);
@@ -163,7 +163,7 @@ const RequestForm = () => {
       console.log('User ID:', user?.id);
       console.log('Requestor ID:', request.requestor?.id);
       console.log('Is viewing:', isViewing);
-      
+
       if (isEditing && !['draft', 'returned'].includes(request.status)) {
         navigate('/dashboard');
         return;
@@ -223,7 +223,7 @@ const RequestForm = () => {
   const handleItemChange = (index, field, value) => {
     setFormData(prev => ({
       ...prev,
-      items: prev.items.map((item, i) => 
+      items: prev.items.map((item, i) =>
         i === index ? { ...item, [field]: value } : item
       )
     }));
@@ -327,13 +327,13 @@ const RequestForm = () => {
         signatureToUse = approval.signature;
       }
     }
-    
+
     // Check if signature is provided
     if (!signatureToUse || signatureToUse.trim() === '') {
       const proceed = confirm('No signature provided. Do you want to proceed without a signature?');
       if (!proceed) return;
     }
-    
+
     const comments = prompt('Enter approval comments (optional):');
     if (comments === null) return;
     try {
@@ -361,7 +361,7 @@ const RequestForm = () => {
         signatureToUse = approval.signature;
       }
     }
-    
+
     const comments = prompt('Enter reason for declining (required):');
     if (!comments || comments.trim() === '') {
       alert('Decline reason is required');
@@ -409,7 +409,7 @@ const RequestForm = () => {
         signatureToUse = approval.signature;
       }
     }
-    
+
     let returnTo = 'requestor';
     if (user.role === 'it_manager' || user.role === 'super_administrator') {
       const choice = confirm(
@@ -494,11 +494,10 @@ const RequestForm = () => {
 
           {/* Decline/Return Notification */}
           {requestData && (formData.status === 'department_declined' || formData.status === 'it_manager_declined' || formData.status === 'returned') && (
-            <div className={`mb-6 p-4 border-2 ${
-              formData.status === 'returned' 
-                ? 'bg-yellow-50 border-yellow-400' 
-                : 'bg-red-50 border-red-400'
-            }`}>
+            <div className={`mb-6 p-4 border-2 ${formData.status === 'returned'
+              ? 'bg-yellow-50 border-yellow-400'
+              : 'bg-red-50 border-red-400'
+              }`}>
               <div className="flex items-start">
                 <div className="flex-shrink-0">
                   {formData.status === 'returned' ? (
@@ -508,9 +507,8 @@ const RequestForm = () => {
                   )}
                 </div>
                 <div className="ml-3 flex-1">
-                  <h3 className={`text-lg font-semibold ${
-                    formData.status === 'returned' ? 'text-yellow-800' : 'text-red-800'
-                  }`}>
+                  <h3 className={`text-lg font-semibold ${formData.status === 'returned' ? 'text-yellow-800' : 'text-red-800'
+                    }`}>
                     {formData.status === 'returned' ? 'Request Returned for Revision' : 'Request Declined'}
                   </h3>
                   {requestData.approvals?.map((approval, index) => {
@@ -540,47 +538,47 @@ const RequestForm = () => {
               <div className="bg-gray-100 -m-4 mb-4 px-4 py-2 border-b border-gray-400">
                 <h2 className="text-sm font-bold text-gray-900 uppercase">Section 1: Requestor Information</h2>
               </div>
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                 <div>
-                   <label className="block text-xs font-semibold text-gray-700 mb-1">
-                     Name of Requestor <span className="text-red-600">*</span>
-                   </label>
-                   <div className="border-b-2 border-gray-400 pb-1">
-                     <input
-                       type="text"
-                       value={getRequestorName()}
-                       disabled
-                       className="w-full bg-transparent border-0 focus:outline-none text-sm"
-                     />
-                   </div>
-                 </div>
-                 <div>
-                   <label className="block text-xs font-semibold text-gray-700 mb-1">
-                     Position
-                   </label>
-                   <div className="border-b-2 border-gray-400 pb-1">
-                     <input
-                       type="text"
-                       value={user?.title || user?.position || ''}
-                       disabled
-                       className="w-full bg-transparent border-0 focus:outline-none text-sm"
-                     />
-                   </div>
-                 </div>
-                 <div>
-                   <label className="block text-xs font-semibold text-gray-700 mb-1">
-                     Department <span className="text-red-600">*</span>
-                   </label>
-                   <div className="border-b-2 border-gray-400 pb-1">
-                     <input
-                       type="text"
-                       value={user?.department?.name || user?.Department?.name || ''}
-                       disabled
-                       className="w-full bg-transparent border-0 focus:outline-none text-sm"
-                     />
-                   </div>
-                 </div>
-               </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Name of Requestor <span className="text-red-600">*</span>
+                  </label>
+                  <div className="border-b-2 border-gray-400 pb-1">
+                    <input
+                      type="text"
+                      value={getRequestorName()}
+                      disabled
+                      className="w-full bg-transparent border-0 focus:outline-none text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Position
+                  </label>
+                  <div className="border-b-2 border-gray-400 pb-1">
+                    <input
+                      type="text"
+                      value={user?.title || user?.position || ''}
+                      disabled
+                      className="w-full bg-transparent border-0 focus:outline-none text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Department <span className="text-red-600">*</span>
+                  </label>
+                  <div className="border-b-2 border-gray-400 pb-1">
+                    <input
+                      type="text"
+                      value={user?.department?.name || user?.Department?.name || ''}
+                      disabled
+                      className="w-full bg-transparent border-0 focus:outline-none text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Section 2: User Information */}
@@ -647,15 +645,15 @@ const RequestForm = () => {
               <div className="bg-gray-100 -m-4 mb-4 px-4 py-2 border-b border-gray-400">
                 <h2 className="text-sm font-bold text-gray-900 uppercase">Section 3: Equipment Required</h2>
               </div>
-              
+
               {/* Equipment Table */}
               <div className="overflow-x-auto mb-4">
                 <table className="w-full border-collapse" style={{ border: '1px solid #000' }}>
                   <thead>
                     <tr className="bg-gray-100">
                       <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>✓</th>
-                      <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>ITEM DESCRIPTION</th>
-                      <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>QTY</th>
+                      <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>ITEM DESCRIPTION <span className="text-red-600">*</span></th>
+                      <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>QTY <span className="text-red-600">*</span></th>
                       <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>INV</th>
                       <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>PROPOSED SPECS</th>
                       <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>PURPOSE</th>
@@ -687,9 +685,8 @@ const RequestForm = () => {
                             {...getInputProps({
                               onChange: (e) => handleItemChange(index, 'itemDescription', e.target.value),
                               placeholder: "Detailed description...",
-                              className: `w-full mt-1 px-1 py-1 border-0 border-b border-gray-300 focus:outline-none focus:border-blue-500 text-xs bg-transparent ${
-                                errors[`item_${index}_description`] ? 'border-red-500' : ''
-                              }`,
+                              className: `w-full mt-1 px-1 py-1 border-0 border-b border-gray-300 focus:outline-none focus:border-blue-500 text-xs bg-transparent ${errors[`item_${index}_description`] ? 'border-red-500' : ''
+                                }`,
                               rows: 2
                             })}
                           />
@@ -704,9 +701,8 @@ const RequestForm = () => {
                             value={item.quantity}
                             {...getInputProps({
                               onChange: (e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1),
-                              className: `w-16 px-1 py-1 border-0 border-b border-gray-300 focus:outline-none focus:border-blue-500 text-xs bg-transparent ${
-                                errors[`item_${index}_quantity`] ? 'border-red-500' : ''
-                              }`
+                              className: `w-16 px-1 py-1 border-0 border-b border-gray-300 focus:outline-none focus:border-blue-500 text-xs bg-transparent ${errors[`item_${index}_quantity`] ? 'border-red-500' : ''
+                                }`
                             })}
                           />
                           {errors[`item_${index}_quantity`] && (
@@ -870,7 +866,7 @@ const RequestForm = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Reason for Equipment Request:
+                    Reason for Equipment Request: <span className="text-red-600">*</span>
                   </label>
                   <div className="border-b-2 border-gray-400 pb-1">
                     <textarea
@@ -928,46 +924,46 @@ const RequestForm = () => {
               <div className="bg-gray-100 -m-4 mb-4 px-4 py-2 border-b border-gray-400">
                 <h2 className="text-sm font-bold text-gray-900 uppercase">Section 5: Signatures</h2>
               </div>
-              
+
               <div className="space-y-4">
                 {/* Signatures - Requestor and Approvers in one row */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {/* Requestor Signature */}
                   <div className="p-3">
                     {/* Show signature button if user is the requestor and can edit */}
-                    {((!isViewing) || (isViewing && canEditReturned) || (isViewing && requestData?.status === 'draft' && requestData?.requestor?.id === user?.id)) && 
-                     (user?.role === 'requestor' || requestData?.requestor?.id === user?.id) && 
-                     !(formData.requestorSignature || requestData?.requestorSignature) && (
-                      <div className="mb-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTempRequestorSignature(formData.requestorSignature || requestData?.requestorSignature || '');
-                            setShowRequestorSignatureModal(true);
-                          }}
-                          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-semibold"
-                        >
-                          <PenTool className="h-4 w-4 mr-2" />
-                          Add Signature
-                        </button>
-                      </div>
-                    )}
-                    
+                    {((!isViewing) || (isViewing && canEditReturned) || (isViewing && requestData?.status === 'draft' && requestData?.requestor?.id === user?.id)) &&
+                      (user?.role === 'requestor' || requestData?.requestor?.id === user?.id) &&
+                      !(formData.requestorSignature || requestData?.requestorSignature) && (
+                        <div className="mb-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTempRequestorSignature(formData.requestorSignature || requestData?.requestorSignature || '');
+                              setShowRequestorSignatureModal(true);
+                            }}
+                            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-semibold"
+                          >
+                            <PenTool className="h-4 w-4 mr-2" />
+                            Add Signature
+                          </button>
+                        </div>
+                      )}
+
                     {/* Display signature above name */}
                     <div className="pb-3 pt-4 min-h-[100px]">
                       {/* Signature above the name - positioned lower left, overlapping slightly */}
                       {(formData.requestorSignature || requestData?.requestorSignature) ? (
                         <div className="mb-0" style={{ marginBottom: '-8px', textAlign: 'left' }}>
-                          <img 
-                            src={formData.requestorSignature || requestData?.requestorSignature} 
-                            alt={`${getRequestorName()} Signature`} 
+                          <img
+                            src={formData.requestorSignature || requestData?.requestorSignature}
+                            alt={`${getRequestorName()} Signature`}
                             className="h-auto"
                             style={{ height: '40px', maxWidth: '300px', objectFit: 'contain', display: 'inline-block' }}
                           />
                         </div>
                       ) : (
-                        isViewing && 
-                        !canEditReturned && 
+                        isViewing &&
+                        !canEditReturned &&
                         requestData?.status !== 'draft' && (
                           <div className="mb-1">
                             <p className="text-xs text-gray-400 italic">
@@ -976,7 +972,7 @@ const RequestForm = () => {
                           </div>
                         )
                       )}
-                      
+
                       {/* Name below signature */}
                       <div className="text-left">
                         {canEditSignature(true) ? (
@@ -1019,12 +1015,12 @@ const RequestForm = () => {
                     const requestNotCompleted = requestData?.status !== 'completed';
                     // Check if this approval has a signature (from backend or locally updated)
                     const hasSignature = approval.signature && approval.signature.trim() !== '';
-                    const canSign = isPendingApproval && 
-                                   isCurrentApprover && 
-                                   requestNotCompleted &&
-                                   (requestData?.permissions?.canApprove || requestData?.permissions?.canProcess) &&
-                                   !hasSignature;
-                    
+                    const canSign = isPendingApproval &&
+                      isCurrentApprover &&
+                      requestNotCompleted &&
+                      (requestData?.permissions?.canApprove || requestData?.permissions?.canProcess) &&
+                      !hasSignature;
+
                     return (
                       <div key={approval.id} className="p-3">
                         {/* Show signature button if current approver can sign */}
@@ -1045,16 +1041,16 @@ const RequestForm = () => {
                             </button>
                           </div>
                         )}
-                        
+
                         {/* Display approver info */}
                         <div className="pb-3 pt-4 min-h-[100px]">
                           {/* Signature above the name - positioned lower left, overlapping slightly */}
                           {/* Check approval.signature (from backend or locally updated via requestData state) */}
                           {hasSignature ? (
                             <div className="mb-0" style={{ marginBottom: '-8px', textAlign: 'left' }}>
-                              <img 
-                                src={approval.signature} 
-                                alt={`${approval.approver?.fullName || 'Approver'} Signature`} 
+                              <img
+                                src={approval.signature}
+                                alt={`${approval.approver?.fullName || 'Approver'} Signature`}
                                 className="h-auto"
                                 style={{ height: '40px', maxWidth: '300px', objectFit: 'contain', display: 'inline-block' }}
                               />
@@ -1068,7 +1064,7 @@ const RequestForm = () => {
                               </div>
                             )
                           )}
-                          
+
                           {/* Name below signature - clickable to edit signature if allowed */}
                           <div className="text-left">
                             {canEditSignature(false, approval) ? (
@@ -1102,77 +1098,77 @@ const RequestForm = () => {
                   })}
 
                   {/* Show signature input for current approver who can approve but isn't in approvals list yet */}
-                  {isViewing && 
-                   requestData?.status !== 'completed' &&
-                   (requestData?.permissions?.canApprove || requestData?.permissions?.canProcess) &&
-                   (!requestData?.approvals || !requestData.approvals.some(a => a.approver?.id === user?.id && a.status === 'pending')) && (
-                    <div className="p-3">
-                      {!approvalSignature && (
-                        <div className="mb-3">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCurrentApprovalId(null); // No approval ID for pending approver
-                              setTempApprovalSignature(approvalSignature || '');
-                              setShowApprovalSignatureModal(true);
-                            }}
-                            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-semibold"
-                          >
-                            <PenTool className="h-4 w-4 mr-2" />
-                            Add Signature
-                          </button>
-                        </div>
-                      )}
-                      
-                      <div className="pb-3 pt-4 min-h-[100px]">
-                        {/* Signature above the name - positioned lower left, overlapping slightly */}
-                        {approvalSignature ? (
-                          <div className="mb-0" style={{ marginBottom: '-8px', textAlign: 'left' }}>
-                            <img 
-                              src={approvalSignature} 
-                              alt={`${user?.fullName || 'Approver'} Signature`} 
-                              className="h-auto"
-                              style={{ height: '40px', maxWidth: '300px', objectFit: 'contain', display: 'inline-block' }}
-                            />
-                          </div>
-                        ) : (
-                          <div className="mb-1">
-                            <p className="text-xs text-gray-400 italic">
-                              (No signature provided)
-                            </p>
-                          </div>
-                        )}
-                        
-                        {/* Name below signature */}
-                        <div className="text-left">
-                          {canEditSignature(false, { status: 'pending', approver: { id: user?.id } }) && 
-                           requestData?.status !== 'completed' &&
-                           !['department_declined', 'it_manager_declined'].includes(requestData?.status) ? (
+                  {isViewing &&
+                    requestData?.status !== 'completed' &&
+                    (requestData?.permissions?.canApprove || requestData?.permissions?.canProcess) &&
+                    (!requestData?.approvals || !requestData.approvals.some(a => a.approver?.id === user?.id && a.status === 'pending')) && (
+                      <div className="p-3">
+                        {!approvalSignature && (
+                          <div className="mb-3">
                             <button
                               type="button"
                               onClick={() => {
-                                setCurrentApprovalId(null);
+                                setCurrentApprovalId(null); // No approval ID for pending approver
                                 setTempApprovalSignature(approvalSignature || '');
                                 setShowApprovalSignatureModal(true);
                               }}
-                              className="text-sm font-semibold text-gray-900 hover:text-blue-600 hover:underline cursor-pointer transition-colors"
+                              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-semibold"
                             >
-                              {user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim()}
+                              <PenTool className="h-4 w-4 mr-2" />
+                              Add Signature
                             </button>
+                          </div>
+                        )}
+
+                        <div className="pb-3 pt-4 min-h-[100px]">
+                          {/* Signature above the name - positioned lower left, overlapping slightly */}
+                          {approvalSignature ? (
+                            <div className="mb-0" style={{ marginBottom: '-8px', textAlign: 'left' }}>
+                              <img
+                                src={approvalSignature}
+                                alt={`${user?.fullName || 'Approver'} Signature`}
+                                className="h-auto"
+                                style={{ height: '40px', maxWidth: '300px', objectFit: 'contain', display: 'inline-block' }}
+                              />
+                            </div>
                           ) : (
-                            <p className="text-sm font-semibold text-gray-900">
-                              {user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim()}
-                            </p>
+                            <div className="mb-1">
+                              <p className="text-xs text-gray-400 italic">
+                                (No signature provided)
+                              </p>
+                            </div>
                           )}
-                          {user?.title && (
-                            <p className="text-xs text-gray-600 mt-1">
-                              {user.title}
-                            </p>
-                          )}
+
+                          {/* Name below signature */}
+                          <div className="text-left">
+                            {canEditSignature(false, { status: 'pending', approver: { id: user?.id } }) &&
+                              requestData?.status !== 'completed' &&
+                              !['department_declined', 'it_manager_declined'].includes(requestData?.status) ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCurrentApprovalId(null);
+                                  setTempApprovalSignature(approvalSignature || '');
+                                  setShowApprovalSignatureModal(true);
+                                }}
+                                className="text-sm font-semibold text-gray-900 hover:text-blue-600 hover:underline cursor-pointer transition-colors"
+                              >
+                                {user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim()}
+                              </button>
+                            ) : (
+                              <p className="text-sm font-semibold text-gray-900">
+                                {user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim()}
+                              </p>
+                            )}
+                            {user?.title && (
+                              <p className="text-xs text-gray-600 mt-1">
+                                {user.title}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
                 </div>
               </div>
             </div>
@@ -1183,7 +1179,7 @@ const RequestForm = () => {
                 <p className="text-red-600 text-sm">{errors.load}</p>
               </div>
             )}
-            
+
             {errors.submit && (
               <div className="bg-red-50 border-2 border-red-400 p-4 mb-4">
                 <p className="text-red-600 text-sm">{errors.submit}</p>
@@ -1199,7 +1195,7 @@ const RequestForm = () => {
               >
                 {isViewing ? 'Back' : 'Cancel'}
               </button>
-              
+
               {canEditReturned && (
                 <button
                   type="button"
@@ -1210,7 +1206,7 @@ const RequestForm = () => {
                   Edit & Resubmit
                 </button>
               )}
-              
+
               {!isViewing && user.role === 'requestor' && (
                 <>
                   <button
@@ -1234,19 +1230,19 @@ const RequestForm = () => {
                 </>
               )}
 
-              {((isViewing || isEditing) && 
-                (requestData?.status === 'draft' || formData?.status === 'draft') && 
+              {((isViewing || isEditing) &&
+                (requestData?.status === 'draft' || formData?.status === 'draft') &&
                 requestData?.requestor?.id === user?.id) && (
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={loading}
-                  className="flex items-center px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 text-sm font-semibold"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Draft
-                </button>
-              )}
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={loading}
+                    className="flex items-center px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 text-sm font-semibold"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Draft
+                  </button>
+                )}
 
               {isViewing && (requestData?.permissions?.canApprove || requestData?.permissions?.canProcess) && (
                 <>
@@ -1322,8 +1318,8 @@ const RequestForm = () => {
         onSave={() => {
           // If we have a current approval ID, update that specific approval in requestData
           if (currentApprovalId && requestData?.approvals) {
-            const updatedApprovals = requestData.approvals.map(approval => 
-              approval.id === currentApprovalId 
+            const updatedApprovals = requestData.approvals.map(approval =>
+              approval.id === currentApprovalId
                 ? { ...approval, signature: tempApprovalSignature }
                 : approval
             );
