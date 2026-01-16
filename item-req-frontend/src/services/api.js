@@ -7,7 +7,7 @@ const getApiUrl = () => {
   const hostname = window.location.hostname;
   const envUrl = import.meta.env.VITE_API_URL;
   let apiUrl;
-  
+
   // If accessing from network (not localhost), always use the network IP
   // This ensures remote users connect to the correct backend server
   if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
@@ -18,7 +18,7 @@ const getApiUrl = () => {
     apiUrl = envUrl || 'http://localhost:3001/api';
     console.log(`🏠 Local access: Using backend at ${apiUrl}`);
   }
-  
+
   return apiUrl;
 };
 
@@ -178,7 +178,9 @@ export const serviceVehicleRequestsAPI = {
       'Content-Type': 'multipart/form-data'
     }
   }),
-  deleteAttachment: (id, filename) => api.delete(`/service-vehicle-requests/${id}/attachments/${filename}`)
+  deleteAttachment: (id, filename) => api.delete(`/service-vehicle-requests/${id}/attachments/${filename}`),
+  assignVerifier: (id, data) => api.post(`/service-vehicle-requests/${id}/assign-verifier`, data),
+  verifyRequest: (id, data) => api.post(`/service-vehicle-requests/${id}/verify`, data)
 }
 
 // Workflows API
@@ -191,16 +193,16 @@ export const workflowsAPI = {
   getActive: (formType) => api.get(`/workflows/active/${formType}`),
   getAllUsers: () => api.get('/workflows/users'), // Get all users for workflow configuration
 }
- //Vehicle Management API
- export const vehicleManagementApi = {
+//Vehicle Management API
+export const vehicleManagementApi = {
   getAll: (params) => api.get('/vehicles', { params }),
   getById: (id) => api.get(`/vehicles/${id}`),
- create: (data) => api.post('/vehicles', data ),
-  update: (id, data) => api.put(`/vehicles/${id}`, data ),
+  create: (data) => api.post('/vehicles', data),
+  update: (id, data) => api.put(`/vehicles/${id}`, data),
   delete: (id) => api.delete(`/vehicles/${id}`),
-  updateAvailability: (id, data) => api.patch(`/vehicles/${id}/availability`, data ),
-  getAvailable: () => api.get('/vehicles/available' ),
- }
+  updateAvailability: (id, data) => api.patch(`/vehicles/${id}/availability`, data),
+  getAvailable: () => api.get('/vehicles/available'),
+}
 //Driver Management API
 export const driverManagementApi = {
   getAll: (params) => api.get('/drivers', { params }),

@@ -563,7 +563,7 @@ class EmailService {
       return;
     }
 
-    const subject = `Vehicle Request Submitted: ${vehicleRequest.reference_code || vehicleRequest.id}`;
+    const subject = `Service Vehicle Request Submitted: ${vehicleRequest.reference_code || vehicleRequest.id}`;
     const html = this.getVehicleRequestSubmittedTemplate(vehicleRequest, requestor, departmentApprover);
     const attachments = await this.prepareAttachments(vehicleRequest.attachments);
 
@@ -576,7 +576,7 @@ class EmailService {
       return;
     }
 
-    const subject = `Action Required: Approve Vehicle Request ${vehicleRequest.reference_code || vehicleRequest.id}`;
+    const subject = `Action Required: Approve Service Vehicle Request ${vehicleRequest.reference_code || vehicleRequest.id}`;
     const html = this.getVehicleApprovalRequestTemplate(vehicleRequest, requestor, approver);
     const attachments = await this.prepareAttachments(vehicleRequest.attachments);
 
@@ -590,8 +590,8 @@ class EmailService {
     }
 
     const subject = isCompleted
-      ? `Vehicle Request Approved: ${vehicleRequest.reference_code || vehicleRequest.id}`
-      : `Vehicle Request Approved - Pending Next Approval: ${vehicleRequest.reference_code || vehicleRequest.id}`;
+      ? `Service Vehicle Request Approved: ${vehicleRequest.reference_code || vehicleRequest.id}`
+      : `Service Vehicle Request Approved - Pending Next Approval: ${vehicleRequest.reference_code || vehicleRequest.id}`;
     const html = this.getVehicleRequestApprovedTemplate(vehicleRequest, requestor, approver, isCompleted, nextApprover, approverComments);
     const attachments = await this.prepareAttachments(vehicleRequest.attachments);
 
@@ -604,7 +604,7 @@ class EmailService {
       return;
     }
 
-    const subject = `Vehicle Request Declined: ${vehicleRequest.reference_code || vehicleRequest.id}`;
+    const subject = `Service Vehicle Request Declined: ${vehicleRequest.reference_code || vehicleRequest.id}`;
     const html = this.getVehicleRequestDeclinedTemplate(vehicleRequest, requestor, approver, comments);
     const attachments = await this.prepareAttachments(vehicleRequest.attachments);
 
@@ -617,7 +617,7 @@ class EmailService {
       return;
     }
 
-    const subject = `Vehicle Request Returned for Revision: ${vehicleRequest.reference_code || vehicleRequest.id}`;
+    const subject = `Service Vehicle Request Returned for Revision: ${vehicleRequest.reference_code || vehicleRequest.id}`;
     const html = this.getVehicleRequestReturnedTemplate(vehicleRequest, requestor, approver, returnReason);
     const attachments = await this.prepareAttachments(vehicleRequest.attachments);
 
@@ -668,46 +668,68 @@ class EmailService {
       <html>
       <head>
         <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background-color: #2563eb; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
-          .content { background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
-          .info-row { margin: 10px 0; }
-          .label { font-weight: bold; color: #4b5563; }
-          .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f5; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+          .header { background-color: #2563eb; color: white; padding: 25px; text-align: center; }
+          .header h2 { margin: 0; font-size: 24px; font-weight: 600; }
+          .content { padding: 30px; }
+          .info-box { background-color: #f8fafc; border-radius: 6px; padding: 15px; margin: 20px 0; border: 1px solid #e2e8f0; }
+          .info-row { margin: 10px 0; display: flex; border-bottom: 1px solid #f1f5f9; padding-bottom: 5px; }
+          .info-row:last-child { border-bottom: none; }
+          .label { font-weight: 600; color: #64748b; width: 140px; min-width: 140px; }
+          .value { color: #0f172a; font-weight: 500; }
+          .button-container { text-align: center; margin-top: 30px; }
+          .button { display: inline-block; padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; transition: background-color 0.2s; }
+          .button:hover { background-color: #1d4ed8; }
+          .footer { background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
+          .footer a { color: #64748b; text-decoration: underline; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <h2>Vehicle Request Submitted Successfully</h2>
+            <h2>Request Submitted</h2>
+            <p style="margin: 5px 0 0; opacity: 0.9;">Service Vehicle Request</p>
           </div>
           <div class="content">
-            <p>Hello ${requestorName},</p>
-            <p>Your vehicle request has been submitted successfully and is now pending department approval.</p>
+            <p>Hello <strong>${requestorName}</strong>,</p>
+            <p>Your service vehicle request has been submitted successfully and is now pending department approval.</p>
             
-            <div class="info-row">
-              <span class="label">Reference Code:</span> ${vehicleRequest.reference_code || vehicleRequest.id}
-            </div>
-            <div class="info-row">
-              <span class="label">Request Type:</span> ${vehicleRequest.request_type || 'N/A'}
-            </div>
-            <div class="info-row">
-              <span class="label">Travel Date:</span> ${vehicleRequest.travel_date_from ? new Date(vehicleRequest.travel_date_from).toLocaleDateString() : 'N/A'}
-            </div>
-            <div class="info-row">
-              <span class="label">Submitted Date:</span> ${new Date(vehicleRequest.submitted_at || vehicleRequest.requested_date || new Date()).toLocaleString()}
+            <div class="info-box">
+              <div class="info-row">
+                <span class="label">Reference Code:</span>
+                <span class="value">${vehicleRequest.reference_code || vehicleRequest.id}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Request Type:</span>
+                <span class="value" style="text-transform: capitalize;">${(vehicleRequest.request_type || 'N/A').replace(/_/g, ' ')}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Travel Date:</span>
+                <span class="value">${vehicleRequest.travel_date_from ? new Date(vehicleRequest.travel_date_from).toLocaleDateString() : 'N/A'}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Submitted Date:</span>
+                <span class="value">${new Date(vehicleRequest.submitted_at || vehicleRequest.requested_date || new Date()).toLocaleString()}</span>
+              </div>
+              ${vehicleRequest.urgency_justification ? `
+              <div class="info-row" style="background-color: #fef2f2; border-left: 3px solid #dc2626; padding-left: 10px;">
+                <span class="label" style="color: #dc2626;">Urgency Justification:</span>
+                <span class="value" style="color: #dc2626; font-weight: bold;">${vehicleRequest.urgency_justification}</span>
+              </div>` : ''}
             </div>
             
-            <p>Your request is now awaiting approval from ${departmentApprover ? `${departmentApprover.first_name || ''} ${departmentApprover.last_name || ''}`.trim() || departmentApprover.username : 'your department approver'}.</p>
+            <p>Your request is now awaiting approval from <strong>${departmentApprover ? `${departmentApprover.first_name || ''} ${departmentApprover.last_name || ''}`.trim() || departmentApprover.username : 'your department approver'}</strong>.</p>
             
             <p>You will be notified once your request has been reviewed.</p>
+            
+            <div class="button-container">
+              <a href="${this.getFrontendUrl()}/login" class="button">Access Login Portal</a>
+            </div>
           </div>
           <div class="footer">
-            <p>This is an automated message. Please do not reply to this email.</p>
-            <p style="margin-top: 10px;">
-              <a href="${this.getFrontendUrl()}/login" style="color: #2563eb; text-decoration: underline;">Access Login Portal</a>
-            </p>
+            <p>This is an automated notification from the General Services Request System.</p>
+            <p>&copy; ${new Date().getFullYear()} Styrotech Corporation</p>
           </div>
         </div>
       </body>
@@ -725,54 +747,77 @@ class EmailService {
       <html>
       <head>
         <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background-color: #dc2626; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
-          .content { background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
-          .info-row { margin: 10px 0; }
-          .label { font-weight: bold; color: #4b5563; }
-          .button { display: inline-block; padding: 10px 20px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
-          .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f5; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+          .header { background-color: #f59e0b; color: white; padding: 25px; text-align: center; }
+          .header h2 { margin: 0; font-size: 24px; font-weight: 600; }
+          .content { padding: 30px; }
+          .info-box { background-color: #f8fafc; border-radius: 6px; padding: 15px; margin: 20px 0; border: 1px solid #e2e8f0; }
+          .info-row { margin: 10px 0; display: flex; border-bottom: 1px solid #f1f5f9; padding-bottom: 5px; }
+          .info-row:last-child { border-bottom: none; }
+          .label { font-weight: 600; color: #64748b; width: 140px; min-width: 140px; }
+          .value { color: #0f172a; font-weight: 500; }
+          .button-container { text-align: center; margin-top: 30px; }
+          .button { display: inline-block; padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; transition: background-color 0.2s; }
+          .button:hover { background-color: #1d4ed8; }
+          .footer { background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
+          .footer a { color: #64748b; text-decoration: underline; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <h2>Action Required: Vehicle Request Approval</h2>
+            <h2>Action Required</h2>
+            <p style="margin: 5px 0 0; opacity: 0.9;">Service Vehicle Request Approval</p>
           </div>
           <div class="content">
-            <p>Hello ${approver.first_name || approver.username},</p>
-            <p>A new vehicle request requires your approval.</p>
+            <p>Hello <strong>${approver.first_name || approver.username}</strong>,</p>
+            <p>A new service vehicle request requires your review and approval.</p>
             
-            <div class="info-row">
-              <span class="label">Reference Code:</span> ${vehicleRequest.reference_code || vehicleRequest.id}
+            <div class="info-box">
+              <div class="info-row">
+                <span class="label">Reference Code:</span>
+                <span class="value">${vehicleRequest.reference_code || vehicleRequest.id}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Requestor:</span>
+                <span class="value">${requestorName}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Request Type:</span>
+                <span class="value" style="text-transform: capitalize;">${(vehicleRequest.request_type || 'N/A').replace(/_/g, ' ')}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Travel Date:</span>
+                <span class="value">${vehicleRequest.travel_date_from ? new Date(vehicleRequest.travel_date_from).toLocaleDateString() : 'N/A'}</span>
+              </div>
+              ${vehicleRequest.purpose ? `
+              <div class="info-row">
+                <span class="label">Purpose:</span>
+                <span class="value">${vehicleRequest.purpose}</span>
+              </div>` : ''}
+              ${vehicleRequest.urgency_justification ? `
+              <div class="info-row" style="background-color: #fef2f2; border-left: 3px solid #dc2626; padding-left: 10px;">
+                <span class="label" style="color: #dc2626;">Urgency Justification:</span>
+                <span class="value" style="color: #dc2626; font-weight: bold;">${vehicleRequest.urgency_justification}</span>
+              </div>` : ''}
+              ${vehicleRequest.attachments && vehicleRequest.attachments.length > 0 ? `
+              <div class="info-row">
+                <span class="label">Attachments:</span>
+                <span class="value">${vehicleRequest.attachments.length} file(s) attached</span>
+              </div>
+              ` : ''}
             </div>
-            <div class="info-row">
-              <span class="label">Requestor:</span> ${requestorName}
-            </div>
-            <div class="info-row">
-              <span class="label">Request Type:</span> ${vehicleRequest.request_type || 'N/A'}
-            </div>
-            <div class="info-row">
-              <span class="label">Travel Date:</span> ${vehicleRequest.travel_date_from ? new Date(vehicleRequest.travel_date_from).toLocaleDateString() : 'N/A'}
-            </div>
-            ${vehicleRequest.purpose ? `<div class="info-row"><span class="label">Purpose:</span> ${vehicleRequest.purpose}</div>` : ''}
-            ${vehicleRequest.attachments && vehicleRequest.attachments.length > 0 ? `
-            <div class="info-row">
-              <span class="label">Attachments:</span> ${vehicleRequest.attachments.length} file(s) attached
-            </div>
-            ` : ''}
             
-            <p>Please review and approve or decline this request in the system.</p>
-            <p style="margin-top: 15px;">
-              <a href="${this.getFrontendUrl()}/login" style="display: inline-block; padding: 10px 20px; background-color: #dc2626; color: white; text-decoration: none; border-radius: 5px;">Access Login Portal</a>
-            </p>
+            <p>Please log in to the General Services Request System to review and process this request.</p>
+            
+            <div class="button-container">
+              <a href="${this.getFrontendUrl()}/login" class="button">Access Login Portal</a>
+            </div>
           </div>
           <div class="footer">
-            <p>This is an automated message. Please do not reply to this email.</p>
-            <p style="margin-top: 10px;">
-              <a href="${this.getFrontendUrl()}/login" style="color: #dc2626; text-decoration: underline;">Access Login Portal</a>
-            </p>
+            <p>This is an automated notification from the General Services Request System.</p>
+            <p>&copy; ${new Date().getFullYear()} Styrotech Corporation</p>
           </div>
         </div>
       </body>
@@ -799,54 +844,74 @@ class EmailService {
       <html>
       <head>
         <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background-color: #16a34a; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
-          .content { background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
-          .info-row { margin: 10px 0; }
-          .label { font-weight: bold; color: #4b5563; }
-          .pending-notice { background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 15px 0; }
-          .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f5; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+          .header { background-color: #16a34a; color: white; padding: 25px; text-align: center; }
+          .header h2 { margin: 0; font-size: 24px; font-weight: 600; }
+          .content { padding: 30px; }
+          .info-box { background-color: #f8fafc; border-radius: 6px; padding: 15px; margin: 20px 0; border: 1px solid #e2e8f0; }
+          .info-row { margin: 10px 0; display: flex; border-bottom: 1px solid #f1f5f9; padding-bottom: 5px; }
+          .info-row:last-child { border-bottom: none; }
+          .label { font-weight: 600; color: #64748b; width: 140px; min-width: 140px; }
+          .value { color: #0f172a; font-weight: 500; }
+          .pending-notice { background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px; }
+          .button-container { text-align: center; margin-top: 30px; }
+          .button { display: inline-block; padding: 12px 24px; background-color: #16a34a; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; transition: background-color 0.2s; }
+          .button:hover { background-color: #15803d; }
+          .footer { background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
+          .footer a { color: #64748b; text-decoration: underline; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <h2>Vehicle Request Approved</h2>
+            <h2>Request Approved</h2>
+            <p style="margin: 5px 0 0; opacity: 0.9;">Service Vehicle Request</p>
           </div>
           <div class="content">
-            <p>Hello ${requestorName},</p>
+            <p>Hello <strong>${requestorName}</strong>,</p>
             ${isCompleted ? `
-            <p>Your vehicle request has been approved and completed.</p>
+            <p>Your service vehicle request has been <strong>approved and completed</strong>.</p>
             ` : `
-            <p>Your vehicle request has been approved by ${approverName}.</p>
+            <p>Your service vehicle request has been approved by ${approverName}.</p>
             <div class="pending-notice">
               <strong>Note:</strong> Your request is now pending approval from ${nextApproverName}. You will be notified once all approvals are complete.
             </div>
             `}
             
-            <div class="info-row">
-              <span class="label">Reference Code:</span> ${vehicleRequest.reference_code || vehicleRequest.id}
+            <div class="info-box">
+              <div class="info-row">
+                <span class="label">Reference Code:</span>
+                <span class="value">${vehicleRequest.reference_code || vehicleRequest.id}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Approved By:</span>
+                <span class="value">${approverName}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Approval Date:</span>
+                <span class="value">${vehicleRequest.approval_date ? new Date(vehicleRequest.approval_date).toLocaleString() : new Date().toLocaleString()}</span>
+              </div>
+              ${commentsToShow ? `
+              <div class="info-row">
+                <span class="label">Comments:</span>
+                <span class="value">${commentsToShow}</span>
+              </div>` : ''}
             </div>
-            <div class="info-row">
-              <span class="label">Approved By:</span> ${approverName}
-            </div>
-            <div class="info-row">
-              <span class="label">Approval Date:</span> ${vehicleRequest.approval_date ? new Date(vehicleRequest.approval_date).toLocaleString() : new Date().toLocaleString()}
-            </div>
-            ${commentsToShow ? `<div class="info-row"><span class="label">Comments from ${approverName}:</span> ${commentsToShow}</div>` : ''}
             
             ${isCompleted ? `
             <p>Your vehicle request is now complete. Please contact your department for further arrangements.</p>
             ` : `
             <p>Your request will be processed further once all required approvals are received.</p>
             `}
+            
+            <div class="button-container">
+              <a href="${this.getFrontendUrl()}/login" class="button">Access Login Portal</a>
+            </div>
           </div>
           <div class="footer">
-            <p>This is an automated message. Please do not reply to this email.</p>
-            <p style="margin-top: 10px;">
-              <a href="${this.getFrontendUrl()}/login" style="color: #16a34a; text-decoration: underline;">Access Login Portal</a>
-            </p>
+            <p>This is an automated notification from the General Services Request System.</p>
+            <p>&copy; ${new Date().getFullYear()} Styrotech Corporation</p>
           </div>
         </div>
       </body>
@@ -867,40 +932,60 @@ class EmailService {
       <html>
       <head>
         <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background-color: #dc2626; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
-          .content { background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
-          .info-row { margin: 10px 0; }
-          .label { font-weight: bold; color: #4b5563; }
-          .reason-box { background-color: #fee2e2; border-left: 4px solid #dc2626; padding: 15px; margin: 15px 0; }
-          .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f5; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+          .header { background-color: #dc2626; color: white; padding: 25px; text-align: center; }
+          .header h2 { margin: 0; font-size: 24px; font-weight: 600; }
+          .content { padding: 30px; }
+          .info-box { background-color: #fef2f2; border-radius: 6px; padding: 15px; margin: 20px 0; border: 1px solid #fecaca; }
+          .info-row { margin: 10px 0; display: flex; border-bottom: 1px solid #fee2e2; padding-bottom: 5px; }
+          .info-row:last-child { border-bottom: none; }
+          .label { font-weight: 600; color: #991b1b; width: 140px; min-width: 140px; }
+          .value { color: #7f1d1d; font-weight: 500; }
+          .reason-box { background-color: #fee2e2; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0; border-radius: 4px; }
+          .button-container { text-align: center; margin-top: 30px; }
+          .button { display: inline-block; padding: 12px 24px; background-color: #dc2626; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; transition: background-color 0.2s; }
+          .button:hover { background-color: #b91c1c; }
+          .footer { background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
+          .footer a { color: #64748b; text-decoration: underline; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <h2>Vehicle Request Declined</h2>
+            <h2>Request Declined</h2>
+            <p style="margin: 5px 0 0; opacity: 0.9;">Service Vehicle Request</p>
           </div>
           <div class="content">
-            <p>Hello ${requestorName},</p>
-            <p>Unfortunately, your vehicle request has been declined.</p>
+            <p>Hello <strong>${requestorName}</strong>,</p>
+            <p>Unfortunately, your service vehicle request has been declined.</p>
             
-            <div class="info-row">
-              <span class="label">Reference Code:</span> ${vehicleRequest.reference_code || vehicleRequest.id}
+            <div class="info-box">
+              <div class="info-row">
+                <span class="label">Reference Code:</span>
+                <span class="value">${vehicleRequest.reference_code || vehicleRequest.id}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Declined By:</span>
+                <span class="value">${approverName}</span>
+              </div>
             </div>
-            <div class="info-row">
-              <span class="label">Declined By:</span> ${approverName}
-            </div>
-            ${comments ? `<div class="reason-box"><strong>Reason:</strong><br>${comments}</div>` : ''}
+            
+            ${comments ? `
+            <div class="reason-box">
+              <strong>Reason for Decline:</strong><br>
+              ${comments}
+            </div>` : ''}
             
             <p>If you have any questions, please contact ${approverName}.</p>
+            
+            <div class="button-container">
+              <a href="${this.getFrontendUrl()}/login" class="button">Access Login Portal</a>
+            </div>
           </div>
           <div class="footer">
-            <p>This is an automated message. Please do not reply to this email.</p>
-            <p style="margin-top: 10px;">
-              <a href="${process.env.FRONTEND_URL}/login" style="color: #dc2626; text-decoration: underline;">Access Login Portal</a>
-            </p>
+            <p>This is an automated notification from the General Services Request System.</p>
+            <p>&copy; ${new Date().getFullYear()} Styrotech Corporation</p>
           </div>
         </div>
       </body>
@@ -921,40 +1006,60 @@ class EmailService {
       <html>
       <head>
         <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background-color: #f59e0b; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
-          .content { background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
-          .info-row { margin: 10px 0; }
-          .label { font-weight: bold; color: #4b5563; }
-          .reason-box { background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 15px 0; }
-          .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f5; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+          .header { background-color: #f59e0b; color: white; padding: 25px; text-align: center; }
+          .header h2 { margin: 0; font-size: 24px; font-weight: 600; }
+          .content { padding: 30px; }
+          .info-box { background-color: #fffbeb; border-radius: 6px; padding: 15px; margin: 20px 0; border: 1px solid #fcd34d; }
+          .info-row { margin: 10px 0; display: flex; border-bottom: 1px solid #fef3c7; padding-bottom: 5px; }
+          .info-row:last-child { border-bottom: none; }
+          .label { font-weight: 600; color: #92400e; width: 140px; min-width: 140px; }
+          .value { color: #78350f; font-weight: 500; }
+          .reason-box { background-color: #fff7ed; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px; }
+          .button-container { text-align: center; margin-top: 30px; }
+          .button { display: inline-block; padding: 12px 24px; background-color: #f59e0b; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; transition: background-color 0.2s; }
+          .button:hover { background-color: #d97706; }
+          .footer { background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
+          .footer a { color: #64748b; text-decoration: underline; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <h2>Vehicle Request Returned for Revision</h2>
+            <h2>Returned for Revision</h2>
+            <p style="margin: 5px 0 0; opacity: 0.9;">Service Vehicle Request</p>
           </div>
           <div class="content">
-            <p>Hello ${requestorName},</p>
-            <p>Your vehicle request has been returned for revision.</p>
+            <p>Hello <strong>${requestorName}</strong>,</p>
+            <p>Your service vehicle request has been returned for revision.</p>
             
-            <div class="info-row">
-              <span class="label">Reference Code:</span> ${vehicleRequest.reference_code || vehicleRequest.id}
+            <div class="info-box">
+              <div class="info-row">
+                <span class="label">Reference Code:</span>
+                <span class="value">${vehicleRequest.reference_code || vehicleRequest.id}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Returned By:</span>
+                <span class="value">${approverName}</span>
+              </div>
             </div>
-            <div class="info-row">
-              <span class="label">Returned By:</span> ${approverName}
-            </div>
-            ${returnReason ? `<div class="reason-box"><strong>Revision Required:</strong><br>${returnReason}</div>` : ''}
+            
+            ${returnReason ? `
+            <div class="reason-box">
+              <strong>Revision Required:</strong><br>
+              ${returnReason}
+            </div>` : ''}
             
             <p>Please review the comments above and resubmit your request with the necessary changes.</p>
+            
+            <div class="button-container">
+              <a href="${this.getFrontendUrl()}/login" class="button">Access Login Portal</a>
+            </div>
           </div>
           <div class="footer">
-            <p>This is an automated message. Please do not reply to this email.</p>
-            <p style="margin-top: 10px;">
-              <a href="${process.env.FRONTEND_URL}/login" style="color: #f59e0b; text-decoration: underline;">Access Login Portal</a>
-            </p>
+            <p>This is an automated notification from the General Services Request System.</p>
+            <p>&copy; ${new Date().getFullYear()} Styrotech Corporation</p>
           </div>
         </div>
       </body>
@@ -1046,6 +1151,122 @@ class EmailService {
     const emailAttachments = await this.prepareAttachments(newAttachments);
 
     return await this.sendEmail(requestor.email, subject, html, null, emailAttachments);
+  }
+
+  // Verification Emails
+  async notifyVerifierAssignment(vehicleRequest, requestor, verifier) {
+    if (!verifier?.email) return;
+
+    const subject = `Action Required: Verify Service Vehicle Request ${vehicleRequest.reference_code || vehicleRequest.id}`;
+    const html = this.getVerifierAssignmentTemplate(vehicleRequest, requestor, verifier);
+    const attachments = await this.prepareAttachments(vehicleRequest.attachments);
+
+    return await this.sendEmail(verifier.email, subject, html, null, attachments);
+  }
+
+  async notifyVerificationOutcome(vehicleRequest, verifier, outcome, comments, odhcEmails) {
+    if (!odhcEmails || odhcEmails.length === 0) return;
+
+    const subject = `Verification ${outcome === 'verified' ? 'Completed' : 'Declined'}: Request ${vehicleRequest.reference_code || vehicleRequest.id}`;
+    const html = this.getVerificationOutcomeTemplate(vehicleRequest, verifier, outcome, comments);
+
+    return await this.sendEmail(odhcEmails, subject, html);
+  }
+
+  getVerifierAssignmentTemplate(vehicleRequest, requestor, verifier) {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: 'Segoe UI', sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; }
+          .header { background-color: #8b5cf6; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { padding: 20px; background-color: #f9fafb; }
+          .info-row { margin: 10px 0; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; }
+          .label { font-weight: bold; color: #4b5563; min-width: 140px; display: inline-block; }
+          .button { display: inline-block; padding: 10px 20px; background-color: #8b5cf6; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>Verification Assignment</h2>
+          </div>
+          <div class="content">
+            <p>Hello ${verifier.first_name || verifier.username},</p>
+            <p>You have been assigned to verify the following Service Vehicle Request.</p>
+            
+            <div class="info-row">
+              <span class="label">Reference Code:</span> ${vehicleRequest.reference_code}
+            </div>
+            <div class="info-row">
+              <span class="label">Requestor:</span> ${requestor.first_name} ${requestor.last_name}
+            </div>
+            <div class="info-row">
+              <span class="label">Travel Date:</span> ${vehicleRequest.travel_date_from}
+            </div>
+             <div class="info-row">
+              <span class="label">Destination:</span> ${vehicleRequest.destination || vehicleRequest.destination_car}
+            </div>
+
+            <p>Please review the details and provide verification or decline/notes.</p>
+            
+            <div style="text-align: center;">
+              <a href="${this.getFrontendUrl()}/requests/${vehicleRequest.id}" class="button">View Request</a>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  getVerificationOutcomeTemplate(vehicleRequest, verifier, outcome, comments) {
+    const isVerified = outcome === 'verified';
+    const color = isVerified ? '#10b981' : '#ef4444';
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: 'Segoe UI', sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; }
+          .header { background-color: ${color}; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { padding: 20px; background-color: #f9fafb; }
+          .info-row { margin: 10px 0; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; }
+          .label { font-weight: bold; color: #4b5563; min-width: 140px; display: inline-block; }
+          .comments { background-color: ${isVerified ? '#d1fae5' : '#fee2e2'}; padding: 15px; border-left: 4px solid ${color}; margin: 15px 0; }
+           .button { display: inline-block; padding: 10px 20px; background-color: ${color}; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>Verification ${isVerified ? 'Success' : 'Declined'}</h2>
+          </div>
+          <div class="content">
+            <p>Hello ODHC Team,</p>
+            <p>The temporary verifier <strong>${verifier.first_name} ${verifier.last_name}</strong> has <strong>${isVerified ? 'VERIFIED' : 'DECLINED'}</strong> the request.</p>
+            
+            <div class="info-row">
+              <span class="label">Reference Code:</span> ${vehicleRequest.reference_code}
+            </div>
+            
+             <div class="comments">
+              <strong>Verifier Comments:</strong><br>
+              ${comments || 'No comments provided.'}
+            </div>
+
+             <div style="text-align: center;">
+              <a href="${this.getFrontendUrl()}/requests/${vehicleRequest.id}" class="button">View Request</a>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
   }
 }
 

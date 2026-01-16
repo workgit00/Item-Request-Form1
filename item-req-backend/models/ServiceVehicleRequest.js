@@ -1,5 +1,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database.js';
+import User from './User.js'; // Assuming User model is in './User.js'
+import Department from './Department.js'; // Assuming Department model is in './Department.js'
 
 const ServiceVehicleRequest = sequelize.define('ServiceVehicleRequest', {
   id: {
@@ -152,6 +154,11 @@ const ServiceVehicleRequest = sequelize.define('ServiceVehicleRequest', {
     allowNull: true,
     comment: 'Comments or notes about the request'
   },
+  urgency_justification: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'Reason for same-day request'
+  },
   attachments: {
     type: DataTypes.JSONB,
     allowNull: true,
@@ -161,6 +168,32 @@ const ServiceVehicleRequest = sequelize.define('ServiceVehicleRequest', {
     type: DataTypes.JSONB,
     allowNull: true,
     comment: 'Array of passenger objects with name field'
+  },
+  requestor_signature: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'Base64 encoded signature of the requestor'
+  },
+  verifier_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'User ID of the temporary verifier'
+  },
+  verification_status: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: 'none',
+    comment: 'Status of the temporary verification'
+  },
+  verified_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Timestamp when verification action was taken'
+  },
+  verifier_comments: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'Comments from the verifier'
   }
 }, {
   tableName: 'service_vehicle_requests',

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import {
   ArrowLeft,
   Plus,
+  UserCheck,
+  PenTool,
   Trash2,
   AlertCircle,
   Save,
@@ -24,6 +26,9 @@ import {
   vehicleManagementApi,
   driverManagementApi,
 } from "../services/api";
+import SignatureModal from "./SignatureModal";
+import VerifierAssignmentModal from "./VerifierAssignmentModal";
+import VerificationResponseModal from "./VerificationResponseModal";
 
 const REQUEST_TYPE_OPTIONS = [
   { value: "drop_passenger_only", label: "Drop Passenger Only" },
@@ -61,8 +66,8 @@ export default function ServiceVehicleRequestForm() {
     has_valid_license: "",
     license_number: "",
     expiration_date: "",
-    requested_by_signature: "",
-    requested_by_date: "",
+    requestor_signature: "",
+    requested_by_date: new Date().toISOString().split('T')[0],
     item_description: "",
     item_pick_up_location: "",
     item_pick_up_time: "",
@@ -75,17 +80,26 @@ export default function ServiceVehicleRequestForm() {
     assigned_driver: "",
     assigned_vehicle: "",
     approval_date: "",
+    urgency_justification: "",
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [isODHCUser, setIsODHCUser] = useState(false);
   const [attachments, setAttachments] = useState([]);
+  const [pendingFiles, setPendingFiles] = useState([]); // Files selected before request is saved
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [availableVehicles, setAvailableVehicles] = useState([]);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [requestorDepartment, setRequestorDepartment] = useState("");
   const [availableDrivers, setAvailableDrivers] = useState([]);
+  const [showJustificationModal, setShowJustificationModal] = useState(false);
+  const [justificationReason, setJustificationReason] = useState("");
+  const [showRequestorSignatureModal, setShowRequestorSignatureModal] = useState(false);
+  const [tempRequestorSignature, setTempRequestorSignature] = useState("");
+  const [showVerifierModal, setShowVerifierModal] = useState(false);
+  const [showVerificationActionModal, setShowVerificationActionModal] = useState(false);
+  const [verificationAction, setVerificationAction] = useState(null);
 
   useEffect(() => {
     // Get current user's full name from auth context
@@ -111,8 +125,9 @@ export default function ServiceVehicleRequestForm() {
       setFormData((prev) => ({
         ...prev,
         requestor_name: userFullName,
-        requested_by_signature: userFullName,
         department_id: userDepartmentId || "",
+        date_prepared: new Date().toISOString().split('T')[0],
+        requested_by_date: new Date().toISOString().split('T')[0],
       }));
     } else {
       // For existing requests, only update requestor_name if not already set
@@ -312,7 +327,28 @@ export default function ServiceVehicleRequestForm() {
     setFormData({ ...formData, passengers: updatedPassengers });
   };
 
-  const handleSubmit = async () => {
+  const handleJustificationSubmit = () => {
+    if (!justificationReason.trim()) {
+      alert("Please provide a justification for the same-day request.");
+      return;
+    }
+    setFormData(prev => ({ ...prev, urgency_justification: justificationReason }));
+    setShowJustificationModal(false);
+    handleSubmit(justificationReason);
+  };
+
+  const handleSubmit = async (arg = null) => {
+    const justificationOverride = typeof arg === 'string' ? arg : null;
+
+    // Check for same-day request justification
+    const isSameDay = formData.date_prepared === formData.travel_date_from;
+    const hasJustification = justificationOverride || formData.urgency_justification;
+
+    if (isSameDay && !hasJustification) {
+      setShowJustificationModal(true);
+      return;
+    }
+
     // Validate dates before form validation
     const dateFields = [
       "date_prepared",
@@ -321,6 +357,9 @@ export default function ServiceVehicleRequestForm() {
       "expiration_date",
     ];
     const cleanedFormData = { ...formData, status: "draft" }; // Save as draft first
+    if (justificationOverride) {
+      cleanedFormData.urgency_justification = justificationOverride;
+    }
 
     dateFields.forEach((field) => {
       if (cleanedFormData[field] && cleanedFormData[field].trim() === "") {
@@ -365,6 +404,29 @@ export default function ServiceVehicleRequestForm() {
         }
       }
 
+      // Upload pending files if any
+      if (pendingFiles.length > 0 && requestId) {
+        try {
+          const uploadFormData = new FormData();
+          pendingFiles.forEach((file) => {
+            uploadFormData.append("files", file);
+          });
+
+          const uploadResponse = await serviceVehicleRequestsAPI.uploadAttachments(
+            requestId,
+            uploadFormData
+          );
+
+          if (uploadResponse.data.success) {
+            setAttachments((prev) => [...prev, ...uploadResponse.data.attachments]);
+            setPendingFiles([]); // Clear pending files after upload
+          }
+        } catch (uploadError) {
+          console.error("Error uploading pending files:", uploadError);
+          // Continue with submission even if file upload fails
+        }
+      }
+
       // Now submit the request (this will trigger email notifications)
       if (requestId) {
         await serviceVehicleRequestsAPI.submit(requestId);
@@ -397,57 +459,136 @@ export default function ServiceVehicleRequestForm() {
 
       const dataToSave = { ...formData, status: "draft" };
 
+      let requestId = id;
+
       if (id) {
         // Update existing draft
         await serviceVehicleRequestsAPI.update(id, dataToSave);
+        requestId = id;
         setSuccessMessage("Draft updated successfully!");
       } else {
         // Create new draft
-        await serviceVehicleRequestsAPI.create(dataToSave);
+        const response = await serviceVehicleRequestsAPI.create(dataToSave);
+        requestId =
+          response.data?.request?.id ||
+          response.data?.request?.request_id ||
+          response.data?.id;
         setSuccessMessage("Form saved as draft successfully!");
       }
 
-      setTimeout(() => {
-        setSuccessMessage("");
-      }, 3000);
+      // Upload pending files if any
+      if (pendingFiles.length > 0 && requestId) {
+        try {
+          const uploadFormData = new FormData();
+          pendingFiles.forEach((file) => {
+            uploadFormData.append("files", file);
+          });
+
+          const uploadResponse = await serviceVehicleRequestsAPI.uploadAttachments(
+            requestId,
+            uploadFormData
+          );
+
+          if (uploadResponse.data.success) {
+            setAttachments((prev) => [...prev, ...uploadResponse.data.attachments]);
+            setPendingFiles([]); // Clear pending files after upload
+          }
+        } catch (uploadError) {
+          console.error("Error uploading pending files:", uploadError);
+          // Continue even if file upload fails
+        }
+      }
+
+      // If this was a new request, navigate to the edit page
+      if (!id && requestId) {
+        setTimeout(() => {
+          navigate(`/service-vehicle-requests/${requestId}`);
+        }, 1500);
+      } else {
+        setTimeout(() => {
+          navigate("/dashboard");
+        }, 1500);
+      }
     } catch (error) {
       console.error("Error saving draft:", error);
-      alert(error.response?.data?.message || "Error saving draft");
+      setErrors({ submit: "Error saving draft. Please try again." });
     } finally {
       setLoading(false);
     }
   };
 
+  const handleAssignVerifierClick = () => setShowVerifierModal(true);
+
+  const handleAssignVerifier = async (verifierId) => {
+    try {
+      setLoading(true);
+      await serviceVehicleRequestsAPI.assignVerifier(id, { verifier_id: verifierId });
+      setSuccessMessage('Verifier assigned successfully');
+      setShowVerifierModal(false);
+      setTimeout(() => navigate('/dashboard'), 1500);
+    } catch (err) {
+      setErrors({ submit: err.message || "Failed to assign verifier" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyClick = (action) => {
+    setVerificationAction(action);
+    setShowVerificationActionModal(true);
+  };
+
+  const handleVerificationConfirm = async (comments) => {
+    try {
+      setLoading(true);
+      await serviceVehicleRequestsAPI.verifyRequest(id, {
+        status: verificationAction === 'verify' ? 'verified' : 'declined',
+        comments
+      });
+      setSuccessMessage(`Request ${verificationAction === 'verify' ? 'verified' : 'declined'}`);
+      setShowVerificationActionModal(false);
+      setTimeout(() => navigate('/dashboard'), 1500);
+    } catch (err) {
+      setErrors({ submit: err.message || "Failed to process verification" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
   const handleFileUpload = async (event) => {
     const files = Array.from(event.target.files);
     if (!files.length) return;
 
-    // Check if user is an approver (department_approver or super_administrator)
-    if (
-      user?.role !== "department_approver" &&
-      user?.role !== "super_administrator"
-    ) {
-      alert("Only approvers can upload attachments");
-      event.target.value = ""; // Reset file input
-      return;
-    }
-
-    // Allow uploads for submitted, returned, department_approved, or completed requests
-    // ODHC approvers need to upload attachments when status is department_approved (after Step 1 approval)
-    if (
-      !["submitted", "returned", "department_approved", "completed"].includes(
-        formData.status
-      )
-    ) {
-      alert(
-        "Attachments can only be uploaded for submitted, returned, department_approved, or completed requests"
-      );
-      event.target.value = ""; // Reset file input
-      return;
-    }
-
+    // If no id yet (new request), store files for later upload
     if (!id) {
-      alert("Please save the request first before uploading attachments");
+      setPendingFiles((prev) => [...prev, ...files]);
+      setSuccessMessage(`${files.length} file(s) selected. They will be uploaded when you save the request.`);
+      setTimeout(() => setSuccessMessage(""), 3000);
+      event.target.value = ""; // Reset file input
+      return;
+    }
+
+    // Check permissions based on user role and request status
+    const isApprover = user?.role === "department_approver" || user?.role === "super_administrator";
+    const isRequestor = user?.role === "requestor";
+
+    if (isRequestor) {
+      // Requestors can upload attachments when status is draft or returned
+      if (!["draft", "returned"].includes(formData.status)) {
+        alert("You can only upload attachments when the request is in draft or returned status");
+        event.target.value = ""; // Reset file input
+        return;
+      }
+    } else if (isApprover) {
+      // Approvers can upload attachments for submitted, returned, department_approved, or completed requests
+      if (!["submitted", "returned", "department_approved", "completed"].includes(formData.status)) {
+        alert("Attachments can only be uploaded for submitted, returned, department_approved, or completed requests");
+        event.target.value = ""; // Reset file input
+        return;
+      }
+    } else {
+      alert("You do not have permission to upload attachments");
       event.target.value = ""; // Reset file input
       return;
     }
@@ -497,6 +638,10 @@ export default function ServiceVehicleRequestForm() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRemovePendingFile = (index) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const formatFileSize = (bytes) => {
@@ -872,7 +1017,7 @@ export default function ServiceVehicleRequestForm() {
                 className={field.span === 2 ? "col-span-1 md:col-span-2" : ""}
               >
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  {field.label}
+                  {field.label} <span className="text-red-600">*</span>
                 </label>
                 <div
                   className={`border-b-2 pb-1 ${errors[field.name] ? "border-red-500" : "border-gray-400"
@@ -944,7 +1089,7 @@ export default function ServiceVehicleRequestForm() {
                     <div className="grid grid-cols-1 gap-2">
                       <div>
                         <label className="block text-xs font-semibold text-gray-700 mb-1">
-                          Name
+                          Name <span className="text-red-600">*</span>
                         </label>
                         <div className="border-b-2 border-gray-400 pb-1">
                           <input
@@ -1142,6 +1287,80 @@ export default function ServiceVehicleRequestForm() {
             </div>
           )}
 
+          {/* Pending Verification Banner */}
+          {formData.verification_status === 'pending' && (
+            <div className="mb-6 p-4 bg-purple-50 border-2 border-purple-500 rounded-md">
+              <div className="flex items-center">
+                <div className="p-2">
+                  <UserCheck className="h-6 w-6 text-purple-500" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-purple-800">Pending Verification</h3>
+                  {formData.Verifier && (
+                    <div className="text-sm text-purple-700">
+                      Assigned to: {formData.Verifier.first_name} {formData.Verifier.last_name}
+                    </div>
+                  )}
+                  <div className="text-sm text-purple-700 italic mt-1">
+                    This request is waiting for verification review.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Verification Status Banner */}
+          {formData.verification_status === 'verified' && (
+            <div className="mb-6 p-4 bg-green-50 border-2 border-green-500 rounded-md">
+              <div className="flex items-center">
+                <div className="p-2">
+                  <CheckCircle className="h-6 w-6 text-green-500" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-green-800">Verified</h3>
+                  {formData.Verifier && (
+                    <div className="text-sm text-green-700">
+                      Verified by: {formData.Verifier.first_name} {formData.Verifier.last_name}
+                    </div>
+                  )}
+                  {formData.verified_at && (
+                    <div className="text-sm text-green-700">
+                      Date: {new Date(formData.verified_at).toLocaleString()}
+                    </div>
+                  )}
+                  {formData.verifier_comments && (
+                    <div className="mt-1 text-sm text-green-700 italic border-l-2 border-green-300 pl-2">
+                      "{formData.verifier_comments}"
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {formData.verification_status === 'declined' && (
+            <div className="mb-6 p-4 bg-red-50 border-2 border-red-500 rounded-md">
+              <div className="flex items-center">
+                <div className="p-2">
+                  <XCircle className="h-6 w-6 text-red-500" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">Verification Declined</h3>
+                  {formData.Verifier && (
+                    <div className="text-sm text-red-700">
+                      Declined by: {formData.Verifier.first_name} {formData.Verifier.last_name}
+                    </div>
+                  )}
+                  {formData.verifier_comments && (
+                    <div className="mt-1 text-sm text-red-700 italic border-l-2 border-red-300 pl-2">
+                      Reason: "{formData.verifier_comments}"
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Error Display */}
           {errors.submit && (
             <div className="bg-red-50 border-2 border-red-400 p-4 mb-4">
@@ -1174,12 +1393,12 @@ export default function ServiceVehicleRequestForm() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Date Prepared
+                    Date Prepared <span className="text-red-600">*</span>
                   </label>
                   <div
                     className={`border-b-2 pb-1 ${errors.date_prepared
-                        ? "border-red-500"
-                        : "border-gray-400"
+                      ? "border-red-500"
+                      : "border-gray-400"
                       }`}
                   >
                     <input
@@ -1233,8 +1452,8 @@ export default function ServiceVehicleRequestForm() {
                   </label>
                   <div
                     className={`border-b-2 pb-1 ${errors.contact_number
-                        ? "border-red-500"
-                        : "border-gray-400"
+                      ? "border-red-500"
+                      : "border-gray-400"
                       }`}
                   >
                     <input
@@ -1272,10 +1491,25 @@ export default function ServiceVehicleRequestForm() {
                 </h2>
               </div>
 
+              {/* Urgency Justification Display */}
+              {formData.urgency_justification && (
+                <div className="mb-3 md:mb-4 flex flex-col">
+                  <label className="text-xs font-semibold block mb-1 text-red-600">
+                    Justification for Same-Day Request
+                  </label>
+                  <textarea
+                    value={formData.urgency_justification}
+                    readOnly
+                    className="w-full border border-red-300 bg-red-50 px-2 py-1 text-xs focus:outline-none"
+                    rows="2"
+                  ></textarea>
+                </div>
+              )}
+
               {/* Purpose */}
               <div className="mb-3 md:mb-4 flex flex-col">
                 <label className="text-xs font-semibold block mb-1">
-                  Purpose of Request
+                  Purpose of Request <span className="text-red-600">*</span>
                 </label>
                 <textarea
                   name="purpose"
@@ -1294,7 +1528,7 @@ export default function ServiceVehicleRequestForm() {
               {/* Request Type */}
               <div className="mb-3 md:mb-4 flex flex-col">
                 <label className="text-xs font-semibold block mb-1">
-                  Type of Request
+                  Type of Request <span className="text-red-600">*</span>
                 </label>
                 <select
                   name="request_type"
@@ -1322,7 +1556,7 @@ export default function ServiceVehicleRequestForm() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 md:gap-x-8 md:gap-y-2 mb-3 md:mb-4">
                 <div className="flex flex-col">
                   <label className="text-xs font-semibold mb-1">
-                    Travel Date From
+                    Travel Date From <span className="text-red-600">*</span>
                   </label>
                   <input
                     type="date"
@@ -1339,7 +1573,7 @@ export default function ServiceVehicleRequestForm() {
                 </div>
                 <div className="flex flex-col">
                   <label className="text-xs font-semibold mb-1">
-                    Travel Date To
+                    Travel Date To <span className="text-red-600">*</span>
                   </label>
                   <input
                     type="date"
@@ -1371,7 +1605,7 @@ export default function ServiceVehicleRequestForm() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Do you have a valid Driver's License?
+                      Do you have a valid Driver's License? <span className="text-red-600">*</span>
                     </label>
                     <div className="border-b-2 border-gray-400 pb-1">
                       <select
@@ -1391,15 +1625,20 @@ export default function ServiceVehicleRequestForm() {
                         <option value="false">No</option>
                       </select>
                     </div>
+                    {errors.has_valid_license && (
+                      <p className="text-red-500 text-xs mt-1">
+                        {errors.has_valid_license}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      License Number
+                      License Number <span className="text-red-600">*</span>
                     </label>
                     <div
                       className={`border-b-2 pb-1 ${errors.license_number
-                          ? "border-red-500"
-                          : "border-gray-400"
+                        ? "border-red-500"
+                        : "border-gray-400"
                         }`}
                     >
                       <input
@@ -1425,12 +1664,12 @@ export default function ServiceVehicleRequestForm() {
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      License Expiration Date
+                      License Expiration Date <span className="text-red-600">*</span>
                     </label>
                     <div
                       className={`border-b-2 pb-1 ${errors.expiration_date
-                          ? "border-red-500"
-                          : "border-gray-400"
+                        ? "border-red-500"
+                        : "border-gray-400"
                         }`}
                     >
                       <input
@@ -1470,54 +1709,60 @@ export default function ServiceVehicleRequestForm() {
                   <label className="block text-xs font-semibold text-gray-700 mb-1">
                     Name and Signature
                   </label>
-                  <div className="border-b-2 border-gray-400 pb-1">
-                    <input
-                      type="text"
-                      name="requested_by_signature"
-                      value={
-                        formData.requested_by_signature ||
-                        formData.requestor_name ||
-                        ""
-                      }
-                      {...getInputProps({
-                        className:
-                          "w-full bg-transparent border-0 focus:outline-none text-sm text-center",
-                        disabled: loading || isReadOnly,
-                      })}
-                    />
+                  <div className="border-b-2 border-gray-400 pb-1 min-h-[40px] flex items-end">
+                    {formData.requestor_signature ? (
+                      <div className="w-full">
+                        <div
+                          className={`mb-0 ${!isReadOnly && (user?.id === formData.requested_by || !id) ? "cursor-pointer group relative" : ""}`}
+                          onClick={() => {
+                            if (!isReadOnly && (user?.id === formData.requested_by || !id)) {
+                              setTempRequestorSignature(formData.requestor_signature);
+                              setShowRequestorSignatureModal(true);
+                            }
+                          }}
+                        >
+                          <img
+                            src={formData.requestor_signature}
+                            alt="Signature"
+                            className="h-10 object-contain -mb-4 relative z-10"
+                          />
+                          {!isReadOnly && (user?.id === formData.requested_by || !id) && (
+                            <span className="block text-[10px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">Click to edit</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-900 -mt-2 leading-tight relative z-0">{formData.requestor_name}</p>
+                      </div>
+                    ) : (
+                      <div
+                        className={`w-full flex items-center justify-between ${!isReadOnly && (user?.id === formData.requested_by || !id) ? "cursor-pointer hover:bg-gray-50 p-1 rounded" : ""}`}
+                        onClick={() => {
+                          if (!isReadOnly && (user?.id === formData.requested_by || !id)) {
+                            setTempRequestorSignature("");
+                            setShowRequestorSignatureModal(true);
+                          }
+                        }}
+                      >
+                        <span className="text-sm text-gray-900">{formData.requestor_name || "Select to Sign"}</span>
+                        {!isReadOnly && (user?.id === formData.requested_by || !id) && (
+                          <PenTool className="h-4 w-4 text-gray-400" />
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">
                     Date
                   </label>
-                  <div
-                    className={`border-b-2 pb-1 ${errors.requested_by_date
-                        ? "border-red-500"
-                        : "border-gray-400"
-                      }`}
-                  >
+                  <div className="border-b-2 border-gray-400 pb-1">
                     <input
                       type="date"
                       name="requested_by_date"
-                      value={
-                        formData.requested_by_date ||
-                        formData.requested_date ||
-                        ""
-                      }
-                      {...getInputProps({
-                        onChange: handleChange,
-                        className:
-                          "w-full bg-transparent border-0 focus:outline-none text-sm text-center",
-                        disabled: loading || isReadOnly,
-                      })}
+                      value={formData.requested_by_date || ""}
+                      readOnly
+                      className="w-full bg-transparent border-0 focus:outline-none text-sm text-center"
                     />
                   </div>
-                  {errors.requested_by_date && (
-                    <p className="text-red-500 text-xs mt-1">
-                      {errors.requested_by_date}
-                    </p>
-                  )}
                 </div>
               </div>
             </div>
@@ -1688,19 +1933,17 @@ export default function ServiceVehicleRequestForm() {
                 </h2>
               </div>
 
-              {/* Show upload UI for approvers (department_approver) and super_administrator when status is submitted, returned, department_approved, or completed */}
-              {/* Approvers can upload attachments even when form is read-only */}
-              {/* ODHC approvers need to upload attachments when status is department_approved (after Step 1 approval) */}
-              {id &&
-                (user?.role === "department_approver" ||
-                  user?.role === "super_administrator") &&
-                formData.status &&
-                [
-                  "submitted",
-                  "returned",
-                  "department_approved",
-                  "completed",
-                ].includes(formData.status) && (
+              {/* Show upload UI for:
+                  - Requestors: always (even when creating new request)
+                  - Approvers: when reviewing (submitted, returned, department_approved, or completed status)
+              */}
+              {(
+                // Requestors can always select files
+                user?.role === "requestor" ||
+                // Approvers can upload when status is submitted, returned, department_approved, or completed
+                (id && (user?.role === "department_approver" || user?.role === "super_administrator") &&
+                  ["submitted", "returned", "department_approved", "completed"].includes(formData.status))
+              ) && (
                   <div className="mb-4">
                     <label className="block text-xs font-semibold text-gray-700 mb-2">
                       Upload Files
@@ -1722,11 +1965,58 @@ export default function ServiceVehicleRequestForm() {
                         Max 10MB per file
                       </span>
                     </div>
+                    {!id && pendingFiles.length > 0 && (
+                      <p className="text-xs text-blue-600 mt-2">
+                        {pendingFiles.length} file(s) will be uploaded when you save this request.
+                      </p>
+                    )}
                   </div>
                 )}
 
+              {/* Show pending files (files selected but not yet uploaded) */}
+              {pendingFiles.length > 0 && (
+                <div className="mb-4">
+                  <h3 className="text-xs font-semibold text-gray-700 mb-2">
+                    Pending Files (will be uploaded when saved)
+                  </h3>
+                  <div className="space-y-2">
+                    {pendingFiles.map((file, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-200 rounded"
+                      >
+                        <div className="flex items-center space-x-3 flex-1">
+                          <Paperclip className="h-4 w-4 text-yellow-600" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-gray-900 truncate">
+                              {file.name}
+                            </p>
+                            <span className="text-xs text-gray-500">
+                              {formatFileSize(file.size || 0)}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePendingFile(index)}
+                          disabled={loading}
+                          className="p-1 text-red-600 hover:text-red-800 disabled:opacity-50"
+                          title="Remove file"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Show uploaded attachments */}
               {attachments.length > 0 ? (
                 <div className="space-y-2">
+                  <h3 className="text-xs font-semibold text-gray-700 mb-2">
+                    Uploaded Files
+                  </h3>
                   {attachments.map((attachment, index) => (
                     <div
                       key={index}
@@ -1748,11 +2038,16 @@ export default function ServiceVehicleRequestForm() {
                           </span>
                         </div>
                       </div>
-                      {/* Only show delete button for approvers (department_approver) and super_administrator */}
-                      {/* Approvers can delete attachments even when form is read-only */}
+                      {/* Show delete button for:
+                          - Requestors: on their own draft or returned requests
+                          - Approvers: on any request they can access
+                      */}
                       {id &&
-                        (user?.role === "department_approver" ||
-                          user?.role === "super_administrator") && (
+                        (
+                          (user?.role === "requestor" && ["draft", "returned"].includes(formData.status)) ||
+                          user?.role === "department_approver" ||
+                          user?.role === "super_administrator"
+                        ) && (
                           <button
                             type="button"
                             onClick={() =>
@@ -1769,7 +2064,9 @@ export default function ServiceVehicleRequestForm() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-500 italic">No attachments</p>
+                !pendingFiles.length && (
+                  <p className="text-sm text-gray-500 italic">No attachments</p>
+                )
               )}
             </div>
 
@@ -1815,6 +2112,40 @@ export default function ServiceVehicleRequestForm() {
                   </>
                 )}
 
+              {/* Verifier Actions */}
+              {isViewing && formData.verifier_id === user?.id && formData.verification_status === 'pending' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleVerifyClick('decline')}
+                    className="flex items-center px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-semibold"
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Decline Verification
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleVerifyClick('verify')}
+                    className="flex items-center px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-semibold"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Verify Request
+                  </button>
+                </>
+              )}
+
+              {/* Assign Verifier (ODHC) */}
+              {isViewing && isODHCUser && (formData.status === 'submitted' || formData.status === 'department_approved') && !['verified', 'declined'].includes(formData.verification_status) && (
+                <button
+                  type="button"
+                  onClick={handleAssignVerifierClick}
+                  className="flex items-center px-6 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm font-semibold"
+                >
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Assign Verifier
+                </button>
+              )}
+
               {/* ODHC (Department Approver) Actions - Only for vehicle requests */}
               {(() => {
                 // Allow approval/return/decline for: submitted, returned, and department_approved (for Step 2 approvers)
@@ -1825,11 +2156,12 @@ export default function ServiceVehicleRequestForm() {
                     user?.role === "super_administrator") &&
                   (formData.status === "submitted" ||
                     formData.status === "returned" ||
-                    formData.status === "department_approved" ||
+                    ((isODHCUser || user?.role === "super_administrator") && formData.status === "department_approved") ||
                     (formData.status &&
                       formData.status !== "completed" &&
                       formData.status !== "declined" &&
-                      formData.status !== "draft"));
+                      formData.status !== "draft" &&
+                      formData.status !== "department_approved"));
                 if (
                   isViewing &&
                   (user?.role === "department_approver" ||
@@ -1902,6 +2234,76 @@ export default function ServiceVehicleRequestForm() {
           </form>
         </div>
       </div>
+      <SignatureModal
+        isOpen={showRequestorSignatureModal}
+        onClose={() => {
+          setShowRequestorSignatureModal(false);
+          setTempRequestorSignature('');
+        }}
+        value={tempRequestorSignature}
+        onChange={(signature) => setTempRequestorSignature(signature)}
+        approverName={formData.requestor_name}
+        approverTitle="Requestor"
+        label="Requestor E-Signature"
+        onSave={() => {
+          setFormData(prev => ({ ...prev, requestor_signature: tempRequestorSignature }));
+          setShowRequestorSignatureModal(false);
+        }}
+      />
+
+      <VerifierAssignmentModal
+        isOpen={showVerifierModal}
+        onClose={() => setShowVerifierModal(false)}
+        onAssign={handleAssignVerifier}
+        loading={loading}
+      />
+
+      <VerificationResponseModal
+        isOpen={showVerificationActionModal}
+        onClose={() => setShowVerificationActionModal(false)}
+        onConfirm={handleVerificationConfirm}
+        action={verificationAction}
+        loading={loading}
+      />
+      {/* Justification Modal */}
+      {showJustificationModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-lg w-full">
+            <h3 className="text-lg font-bold text-red-600 mb-4 flex items-center">
+              <AlertCircle className="h-6 w-6 mr-2" />
+              Justification Required
+            </h3>
+            <p className="text-sm text-gray-700 mb-4">
+              As a general rule, same-day requests are not allowed.
+              <br />
+              Exceptions may be granted only in cases of emergency or business exigency, subject to approval.
+              <br /><br />
+              Please submit a justification.
+            </p>
+            <textarea
+              value={justificationReason}
+              onChange={(e) => setJustificationReason(e.target.value)}
+              className="w-full border border-gray-300 rounded p-2 mb-4 focus:outline-none focus:ring-2 focus:ring-red-500"
+              placeholder="Enter your justification here..."
+              rows={4}
+            />
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowJustificationModal(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 text-sm font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleJustificationSubmit}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-semibold"
+              >
+                Submit Request
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

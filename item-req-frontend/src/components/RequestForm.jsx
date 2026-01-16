@@ -495,8 +495,8 @@ const RequestForm = () => {
           {/* Decline/Return Notification */}
           {requestData && (formData.status === 'department_declined' || formData.status === 'it_manager_declined' || formData.status === 'returned') && (
             <div className={`mb-6 p-4 border-2 ${formData.status === 'returned'
-                ? 'bg-yellow-50 border-yellow-400'
-                : 'bg-red-50 border-red-400'
+              ? 'bg-yellow-50 border-yellow-400'
+              : 'bg-red-50 border-red-400'
               }`}>
               <div className="flex items-start">
                 <div className="flex-shrink-0">
@@ -652,8 +652,8 @@ const RequestForm = () => {
                   <thead>
                     <tr className="bg-gray-100">
                       <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>✓</th>
-                      <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>ITEM DESCRIPTION</th>
-                      <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>QTY</th>
+                      <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>ITEM DESCRIPTION <span className="text-red-600">*</span></th>
+                      <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>QTY <span className="text-red-600">*</span></th>
                       <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>INV</th>
                       <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>PROPOSED SPECS</th>
                       <th className="border border-gray-600 px-2 py-2 text-left text-xs font-bold" style={{ border: '1px solid #000' }}>PURPOSE</th>
@@ -866,7 +866,7 @@ const RequestForm = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Reason for Equipment Request:
+                    Reason for Equipment Request: <span className="text-red-600">*</span>
                   </label>
                   <div className="border-b-2 border-gray-400 pb-1">
                     <textarea
